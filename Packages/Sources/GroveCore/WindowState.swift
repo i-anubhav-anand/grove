@@ -6,6 +6,7 @@ import SwiftUI
 public enum InspectorTab: String, CaseIterable {
     case changes = "Changes"
     case terminal = "Terminal"
+    case checks = "Checks"
     case review = "Review"
     case memo = "Memo"
 
@@ -13,7 +14,8 @@ public enum InspectorTab: String, CaseIterable {
         switch self {
         case .changes: "plusminus.circle"
         case .terminal: "apple.terminal"
-        case .review: "checkmark.seal"
+        case .checks: "checkmark.seal"
+        case .review: "text.bubble"
         case .memo: "note.text"
         }
     }

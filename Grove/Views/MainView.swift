@@ -16,6 +16,7 @@ struct MainView: View {
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
+    @State private var showCommandPalette = false
 
     enum SidebarTab: String, CaseIterable {
         case history = "History"
@@ -121,6 +122,14 @@ struct MainView: View {
                 if inspectorStarted {
                     InspectorPanel()
                 }
+            }
+            .overlay {
+                CommandPaletteView(isPresented: $showCommandPalette)
+                    .background {
+                        Button("") { showCommandPalette.toggle() }
+                            .keyboardShortcut("k", modifiers: .command)
+                            .hidden()
+                    }
             }
         }
     }
@@ -416,7 +425,7 @@ struct InspectorPanel: View {
         switch tab {
         case .terminal: terminalFocusID = UUID()
         case .memo: memoFocusID = UUID()
-        case .changes, .review: break
+        case .changes, .checks, .review: break
         }
     }
 
@@ -478,6 +487,13 @@ struct InspectorPanel: View {
             .padding(8)
             .background(ClaudeTheme.codeBackground)
             .frame(maxHeight: windowState.inspectorTab == .terminal ? .infinity : 0)
+            .clipped()
+
+            ChecksPaneView(
+                worktreePath: windowState.selectedWorkspace?.worktreePath,
+                branch: windowState.selectedWorkspace?.branch
+            )
+            .frame(maxHeight: windowState.inspectorTab == .checks ? .infinity : 0)
             .clipped()
 
             ReviewPaneView()
