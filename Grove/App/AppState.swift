@@ -80,6 +80,9 @@ final class AppState {
 
     var projects: [Project] = []
 
+    /// Workspaces (git worktrees) across all projects. See AppState+Workspaces.
+    var workspaces: [Workspace] = []
+
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
     /// Independent state for all active sessions. Key: sessionId
@@ -378,6 +381,7 @@ final class AppState {
     let persistence: PersistenceService
     let marketplace = MarketplaceService()
     let directoryWatcher = DirectoryWatcher()
+    let worktreeService = GitWorktreeService()
 
     init() {
         let metaStore = self.metaStore
@@ -516,6 +520,8 @@ final class AppState {
             projects = deduplicated
             try? await persistence.saveProjects(projects)
         }
+
+        workspaces = await loadAndReconcileWorkspaces()
 
         if let cachedUser = await persistence.loadGitHubUser() {
             gitHubUser = cachedUser

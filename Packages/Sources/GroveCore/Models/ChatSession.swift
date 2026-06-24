@@ -14,6 +14,9 @@ public struct ChatSession: Identifiable, Codable, Sendable {
     public var effort: String?
     public var permissionMode: PermissionMode?
     public var origin: SessionOrigin
+    /// Workspace (git worktree) this session runs in. `nil` = floating/legacy
+    /// session bound only to the project's main checkout.
+    public var workspaceId: UUID?
 
     public init(
         id: String,
@@ -26,7 +29,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         model: String? = nil,
         effort: String? = nil,
         permissionMode: PermissionMode? = nil,
-        origin: SessionOrigin = .cliBacked
+        origin: SessionOrigin = .cliBacked,
+        workspaceId: UUID? = nil
     ) {
         self.id = id
         self.projectId = projectId
@@ -39,10 +43,11 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         self.effort = effort
         self.permissionMode = permissionMode
         self.origin = origin
+        self.workspaceId = workspaceId
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin
+        case id, projectId, title, messages, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, workspaceId
     }
 
     public init(from decoder: Decoder) throws {
@@ -58,6 +63,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         effort = try container.decodeIfPresent(String.self, forKey: .effort)
         permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
         origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyGrove
+        workspaceId = try container.decodeIfPresent(UUID.self, forKey: .workspaceId)
     }
 
     public struct Summary: Identifiable, Codable, Sendable, Equatable {
@@ -71,6 +77,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
         public var effort: String?
         public var permissionMode: PermissionMode?
         public var origin: SessionOrigin
+        public var workspaceId: UUID?
 
         public init(
             id: String,
@@ -82,7 +89,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             model: String? = nil,
             effort: String? = nil,
             permissionMode: PermissionMode? = nil,
-            origin: SessionOrigin = .cliBacked
+            origin: SessionOrigin = .cliBacked,
+            workspaceId: UUID? = nil
         ) {
             self.id = id
             self.projectId = projectId
@@ -94,10 +102,11 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             self.effort = effort
             self.permissionMode = permissionMode
             self.origin = origin
+            self.workspaceId = workspaceId
         }
 
         private enum CodingKeys: String, CodingKey {
-            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin
+            case id, projectId, title, createdAt, updatedAt, isPinned, model, effort, permissionMode, origin, workspaceId
         }
 
         public init(from decoder: Decoder) throws {
@@ -112,6 +121,7 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             effort = try container.decodeIfPresent(String.self, forKey: .effort)
             permissionMode = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionMode)
             origin = try container.decodeIfPresent(SessionOrigin.self, forKey: .origin) ?? .legacyGrove
+            workspaceId = try container.decodeIfPresent(UUID.self, forKey: .workspaceId)
         }
     }
 
@@ -126,7 +136,8 @@ public struct ChatSession: Identifiable, Codable, Sendable {
             model: model,
             effort: effort,
             permissionMode: permissionMode,
-            origin: origin
+            origin: origin,
+            workspaceId: workspaceId
         )
     }
 }
@@ -137,6 +148,6 @@ extension ChatSession.Summary {
                     messages: [], createdAt: createdAt,
                     updatedAt: updatedAt, isPinned: isPinned,
                     model: model, effort: effort, permissionMode: permissionMode,
-                    origin: origin)
+                    origin: origin, workspaceId: workspaceId)
     }
 }

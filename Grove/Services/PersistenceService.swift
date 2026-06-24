@@ -27,6 +27,18 @@ actor PersistenceService {
         return decode([Project].self, from: url) ?? []
     }
 
+    // MARK: - Workspaces
+
+    func saveWorkspaces(_ workspaces: [Workspace]) throws {
+        let url = baseURL.appendingPathComponent("workspaces.json")
+        try encode(workspaces, to: url)
+    }
+
+    func loadWorkspaces() -> [Workspace] {
+        let url = baseURL.appendingPathComponent("workspaces.json")
+        return decode([Workspace].self, from: url) ?? []
+    }
+
     // MARK: - Sessions
 
     func saveSession(_ session: ChatSession, persistTitle: Bool = false) async throws {

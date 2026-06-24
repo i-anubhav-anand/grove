@@ -42,6 +42,7 @@ public final class WindowState {
     // MARK: - Project / Session Selection
 
     public var selectedProject: Project?
+    public var selectedWorkspace: Workspace?
     public var currentSessionId: String?
 
     // MARK: - Placeholder Tracking

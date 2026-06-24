@@ -1,0 +1,69 @@
+import Foundation
+import GroveCore
+
+/// Workspace (git worktree) CRUD on top of `GitWorktreeService`. Kept in its own
+/// file so the core AppState stays focused.
+@MainActor
+extension AppState {
+
+    /// Workspaces belonging to a project.
+    func workspaces(for projectId: UUID) -> [Workspace] {
+        workspaces.filter { $0.projectId == projectId }
+    }
+
+    /// Create a git worktree on a new branch for the project and record it.
+    @discardableResult
+    func createWorkspace(projectId: UUID, branch: String, baseRef: String = "HEAD") async throws -> Workspace {
+        guard let project = projects.first(where: { $0.id == projectId }) else {
+            throw WorkspaceError.projectNotFound
+        }
+        let path = try await worktreeService.createWorktree(
+            repo: project.path, branch: branch, baseRef: baseRef
+        )
+        let workspace = Workspace(projectId: projectId, branch: branch, worktreePath: path)
+        workspaces.append(workspace)
+        try? await persistence.saveWorkspaces(workspaces)
+        return workspace
+    }
+
+    /// Remove a workspace's worktree and forget it.
+    func deleteWorkspace(_ workspace: Workspace, force: Bool = false) async throws {
+        if let project = projects.first(where: { $0.id == workspace.projectId }) {
+            try await worktreeService.removeWorktree(
+                repo: project.path, path: workspace.worktreePath, force: force
+            )
+        }
+        workspaces.removeAll { $0.id == workspace.id }
+        try? await persistence.saveWorkspaces(workspaces)
+    }
+
+    /// Make a workspace the active context for a window.
+    func selectWorkspace(_ workspace: Workspace, in window: WindowState) {
+        window.selectedWorkspace = workspace
+        if let project = projects.first(where: { $0.id == workspace.projectId }) {
+            window.selectedProject = project
+        }
+    }
+
+    /// Load persisted workspaces and drop any whose worktree directory is gone
+    /// (removed outside the app). Discovery of externally-created worktrees is a
+    /// follow-up (see issue #2).
+    func loadAndReconcileWorkspaces() async -> [Workspace] {
+        let saved = await persistence.loadWorkspaces()
+        let fm = FileManager.default
+        let alive = saved.filter { fm.fileExists(atPath: $0.worktreePath) }
+        if alive.count != saved.count {
+            try? await persistence.saveWorkspaces(alive)
+        }
+        return alive
+    }
+
+    enum WorkspaceError: LocalizedError {
+        case projectNotFound
+        var errorDescription: String? {
+            switch self {
+            case .projectNotFound: return "No project found for that workspace."
+            }
+        }
+    }
+}
