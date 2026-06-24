@@ -15,6 +15,7 @@ struct NewWorkspaceSheet: View {
     @State private var baseRef = "HEAD"
     @State private var creating = false
     @State private var errorText: String?
+    @State private var showDispatcher = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -46,6 +47,12 @@ struct NewWorkspaceSheet: View {
             }
 
             HStack {
+                Button {
+                    showDispatcher = true
+                } label: {
+                    Label("Dispatch from issue", systemImage: "arrow.up.forward.app")
+                }
+                .buttonStyle(.link)
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
@@ -57,6 +64,12 @@ struct NewWorkspaceSheet: View {
         .padding(20)
         .frame(width: 460)
         .onAppear { projectId = preselectedProject?.id ?? appState.projects.first?.id }
+        .sheet(isPresented: $showDispatcher) {
+            DispatcherView(
+                preselectedProject: projectId.flatMap { id in appState.projects.first { $0.id == id } } ?? preselectedProject,
+                onDispatched: { dismiss() }
+            )
+        }
     }
 
     private var canCreate: Bool {
