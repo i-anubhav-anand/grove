@@ -4,16 +4,12 @@ import GroveCore
 /// Sidebar that groups **Project → Workspaces → Sessions**. Each workspace is a
 /// git worktree on its own branch; selecting one sets `windowState.selectedWorkspace`.
 /// Floating (legacy) sessions with no workspace appear directly under their project.
-///
-/// Includes a minimal "+ workspace" create affordance so the feature is usable now;
-/// the fuller create/manage flow (repo picker, archive guards) is issue #5.
 struct WorkspaceListView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
 
     @State private var creatingForProject: Project?
-    @State private var newBranch = ""
-    @State private var isCreating = false
+    @State private var pendingArchive: Workspace?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -45,7 +41,15 @@ struct WorkspaceListView: View {
             }
         }
         .sheet(item: $creatingForProject) { project in
-            createSheet(project)
+            NewWorkspaceSheet(preselectedProject: project)
+        }
+        .alert("Archive workspace?", isPresented: archiveAlertBinding, presenting: pendingArchive) { ws in
+            Button("Force archive", role: .destructive) {
+                Task { try? await appState.deleteWorkspace(ws, force: true) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { ws in
+            Text("The worktree for “\(ws.displayName)” has uncommitted changes (or couldn't be removed cleanly). Force-remove it and discard those changes?")
         }
     }
 
@@ -71,7 +75,6 @@ struct WorkspaceListView: View {
                 .lineLimit(1)
             Spacer()
             Button {
-                newBranch = ""
                 creatingForProject = project
             } label: {
                 Image(systemName: "plus")
@@ -116,9 +119,9 @@ struct WorkspaceListView: View {
                 appState.startNewChat(in: windowState)
             } label: { Label("New session here", systemImage: "square.and.pencil") }
             Divider()
-            Button(role: .destructive) {
-                Task { try? await appState.deleteWorkspace(ws, force: true) }
-            } label: { Label("Archive workspace", systemImage: "archivebox") }
+            Button(role: .destructive) { archive(ws) } label: {
+                Label("Archive workspace", systemImage: "archivebox")
+            }
         }
     }
 
@@ -160,50 +163,28 @@ struct WorkspaceListView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Create sheet (minimal — full flow is #5)
+    // MARK: - Actions
 
-    private func createSheet(_ project: Project) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("New workspace in \(project.name)")
-                .font(.headline)
-            Text("Creates a git worktree on a new branch.")
-                .font(.caption).foregroundStyle(.secondary)
-            TextField("Branch name (e.g. feature/login)", text: $newBranch)
-                .textFieldStyle(.roundedBorder)
-            HStack {
-                Spacer()
-                Button("Cancel") { creatingForProject = nil }
-                Button("Create") { create(in: project) }
-                    .keyboardShortcut(.return)
-                    .disabled(newBranch.trimmingCharacters(in: .whitespaces).isEmpty || isCreating)
-            }
-        }
-        .padding(20)
-        .frame(width: 420)
-    }
-
-    private func create(in project: Project) {
-        let branch = newBranch.trimmingCharacters(in: .whitespaces)
-        guard !branch.isEmpty else { return }
-        isCreating = true
+    /// Try a clean archive first; if the worktree is dirty (or removal fails),
+    /// surface a force-confirm alert.
+    private func archive(_ ws: Workspace) {
         Task {
             do {
-                let ws = try await appState.createWorkspace(projectId: project.id, branch: branch)
-                appState.selectWorkspace(ws, in: windowState)
-                creatingForProject = nil
+                try await appState.deleteWorkspace(ws, force: false)
             } catch {
-                windowState.errorMessage = error.localizedDescription
-                windowState.showError = true
+                pendingArchive = ws
             }
-            isCreating = false
         }
+    }
+
+    private var archiveAlertBinding: Binding<Bool> {
+        Binding(get: { pendingArchive != nil }, set: { if !$0 { pendingArchive = nil } })
     }
 
     // MARK: - Data
 
     private var visibleProjects: [Project] {
-        if let selected = windowState.selectedProject,
-           windowState.isProjectWindow {
+        if let selected = windowState.selectedProject, windowState.isProjectWindow {
             return [selected]
         }
         return appState.projects
