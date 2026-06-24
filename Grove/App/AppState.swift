@@ -813,10 +813,12 @@ final class AppState {
         window.attachments = []
 
         let (resolvedAttachments, tempFilePaths) = AttachmentFactory.resolvingClipboardImages(currentAttachments)
-        let fullPrompt = buildPromptWithAttachments(prompt, attachments: resolvedAttachments)
+        let imageBlocks = AttachmentFactory.imageBlocks(from: resolvedAttachments)
+        let fullPrompt = buildPromptWithAttachments(prompt, attachments: resolvedAttachments,
+                                                    excludingImageIDs: Set(imageBlocks.map(\.sourceID)))
 
         await sendPrompt(fullPrompt, displayText: prompt, attachments: resolvedAttachments,
-                         tempFilePaths: tempFilePaths, in: window)
+                         tempFilePaths: tempFilePaths, imageBlocks: imageBlocks, in: window)
     }
 
     /// Slash commands handled natively. Returns true if handled.
@@ -953,6 +955,7 @@ final class AppState {
         skipAppendingUserMessage: Bool = false,
         initialMessages: [ChatMessage]? = nil,
         tempFilePaths: [String] = [],
+        imageBlocks: [ImageBlock] = [],
         in window: WindowState
     ) async {
         guard let project = window.selectedProject else {
@@ -1043,6 +1046,7 @@ final class AppState {
                 effort: window.sessionEffort ?? (self.selectedEffort == "auto" ? nil : self.selectedEffort),
                 hookSettingsPath: hookSettingsPath,
                 permissionMode: currentPermissionMode,
+                imageBlocks: imageBlocks,
                 projectId: project.id,
                 window: window
             )
@@ -1151,6 +1155,7 @@ final class AppState {
         effort: String? = nil,
         hookSettingsPath: String?,
         permissionMode: PermissionMode = .default,
+        imageBlocks: [ImageBlock] = [],
         projectId: UUID,
         window: WindowState
     ) async {
@@ -1167,7 +1172,8 @@ final class AppState {
             model: model,
             effort: effort,
             hookSettingsPath: hookSettingsPath,
-            permissionMode: permissionMode
+            permissionMode: permissionMode,
+            imageBlocks: imageBlocks
         )
 
         startFlushTimer(for: sessionKey)
@@ -2498,9 +2504,16 @@ final class AppState {
         window.attachments.removeAll { $0.id == id }
     }
 
-    private func buildPromptWithAttachments(_ text: String, attachments: [Attachment]) -> String {
-        guard !attachments.isEmpty else { return text }
-        let attachmentLines = attachments.map(\.promptContext).joined(separator: "\n")
+    private func buildPromptWithAttachments(
+        _ text: String,
+        attachments: [Attachment],
+        excludingImageIDs: Set<UUID> = []
+    ) -> String {
+        // Images sent as base64 blocks don't need a textual `[Attached image: …]` line —
+        // the path is often a temp file and just adds noise the model can't act on.
+        let textual = attachments.filter { !excludingImageIDs.contains($0.id) }
+        guard !textual.isEmpty else { return text }
+        let attachmentLines = textual.map(\.promptContext).joined(separator: "\n")
         let userText = text.isEmpty ? "See attached files" : text
         return "\(attachmentLines)\n\n\(userText)"
     }
@@ -2672,7 +2685,9 @@ final class AppState {
         else { window.draftQueues[sessionKey] = queue }
 
         let (resolvedAttachments, tempFilePaths) = AttachmentFactory.resolvingClipboardImages(next.attachments)
-        let prompt = buildPromptWithAttachments(next.text, attachments: resolvedAttachments)
+        let imageBlocks = AttachmentFactory.imageBlocks(from: resolvedAttachments)
+        let prompt = buildPromptWithAttachments(next.text, attachments: resolvedAttachments,
+                                                excludingImageIDs: Set(imageBlocks.map(\.sourceID)))
         let displayText = next.text
         let streamId = UUID()
 
@@ -2708,6 +2723,7 @@ final class AppState {
                 effort: effort,
                 hookSettingsPath: hookSettingsPath,
                 permissionMode: currentPermissionMode,
+                imageBlocks: imageBlocks,
                 projectId: projectId,
                 window: window
             )
