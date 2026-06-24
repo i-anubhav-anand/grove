@@ -13,7 +13,7 @@ extension AppState {
 
     /// Create a git worktree on a new branch for the project and record it.
     @discardableResult
-    func createWorkspace(projectId: UUID, branch: String, baseRef: String = "HEAD") async throws -> Workspace {
+    func createWorkspace(projectId: UUID, branch: String, baseRef: String? = nil) async throws -> Workspace {
         guard let project = projects.first(where: { $0.id == projectId }) else {
             throw WorkspaceError.projectNotFound
         }
