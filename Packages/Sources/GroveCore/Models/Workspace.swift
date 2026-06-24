@@ -13,6 +13,9 @@ public struct Workspace: Identifiable, Codable, Sendable, Hashable {
     public let createdAt: Date
     /// Optional user-facing name; falls back to the branch when nil.
     public var title: String?
+    /// Board status. Workspaces persisted before this field existed decode as
+    /// `.inProgress` (see `init(from:)`).
+    public var status: WorkspaceStatus
 
     public init(
         id: UUID = UUID(),
@@ -20,7 +23,8 @@ public struct Workspace: Identifiable, Codable, Sendable, Hashable {
         branch: String,
         worktreePath: String,
         createdAt: Date = Date(),
-        title: String? = nil
+        title: String? = nil,
+        status: WorkspaceStatus = .inProgress
     ) {
         self.id = id
         self.projectId = projectId
@@ -28,8 +32,26 @@ public struct Workspace: Identifiable, Codable, Sendable, Hashable {
         self.worktreePath = worktreePath
         self.createdAt = createdAt
         self.title = title
+        self.status = status
     }
 
     /// Display name for the sidebar.
     public var displayName: String { title ?? branch }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, projectId, branch, worktreePath, createdAt, title, status
+    }
+
+    // Custom decode so older `workspaces.json` (no `status` key) stays loadable.
+    // `encode(to:)` is left synthesized.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        projectId = try c.decode(UUID.self, forKey: .projectId)
+        branch = try c.decode(String.self, forKey: .branch)
+        worktreePath = try c.decode(String.self, forKey: .worktreePath)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        status = try c.decodeIfPresent(WorkspaceStatus.self, forKey: .status) ?? .inProgress
+    }
 }

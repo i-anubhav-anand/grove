@@ -23,10 +23,16 @@ struct WorkspaceListView: View {
                 List {
                     ForEach(visibleProjects) { project in
                         Section {
-                            ForEach(appState.workspaces(for: project.id)) { ws in
-                                workspaceRow(ws, project: project)
-                                ForEach(sessions(workspaceId: ws.id, projectId: project.id)) { s in
-                                    sessionRow(s, indented: true)
+                            ForEach(WorkspaceStatus.allCases, id: \.self) { status in
+                                let group = workspaces(for: project.id, status: status)
+                                if !group.isEmpty {
+                                    statusHeader(status, count: group.count)
+                                    ForEach(group) { ws in
+                                        workspaceRow(ws, project: project)
+                                        ForEach(sessions(workspaceId: ws.id, projectId: project.id)) { s in
+                                            sessionRow(s, indented: true)
+                                        }
+                                    }
                                 }
                             }
                             ForEach(floatingSessions(projectId: project.id)) { s in
@@ -85,11 +91,44 @@ struct WorkspaceListView: View {
         }
     }
 
+    /// Status subsection header (one per non-empty status within a project).
+    private func statusHeader(_ status: WorkspaceStatus, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor(status))
+                .frame(width: 7, height: 7)
+            Text(status.label)
+                .font(.system(size: ClaudeTheme.size(10), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .textCase(.uppercase)
+            Spacer()
+            Text("\(count)")
+                .font(.system(size: ClaudeTheme.size(10)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+        .padding(.top, 4)
+        .padding(.leading, 4)
+    }
+
+    /// Dot color per board status.
+    private func statusColor(_ status: WorkspaceStatus) -> Color {
+        switch status {
+        case .backlog: return .secondary
+        case .inProgress: return .blue
+        case .inReview: return .orange
+        case .done: return .green
+        }
+    }
+
     // MARK: - Rows
 
     private func workspaceRow(_ ws: Workspace, project: Project) -> some View {
         let isSelected = windowState.selectedWorkspace?.id == ws.id
         return HStack(spacing: 6) {
+            Circle()
+                .fill(statusColor(ws.status))
+                .frame(width: 7, height: 7)
+                .help(ws.status.label)
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: ClaudeTheme.size(10)))
                 .foregroundStyle(ClaudeTheme.textSecondary)
@@ -126,6 +165,20 @@ struct WorkspaceListView: View {
                 appState.selectWorkspace(ws, in: windowState)
                 appState.startNewChat(in: windowState)
             } label: { Label("New session here", systemImage: "square.and.pencil") }
+            Divider()
+            Menu {
+                ForEach(WorkspaceStatus.allCases, id: \.self) { status in
+                    Button {
+                        appState.setStatus(status, for: ws)
+                    } label: {
+                        if ws.status == status {
+                            Label(status.label, systemImage: "checkmark")
+                        } else {
+                            Text(status.label)
+                        }
+                    }
+                }
+            } label: { Label("Status", systemImage: "circle.dashed") }
             Divider()
             Button(role: .destructive) { archive(ws) } label: {
                 Label("Archive workspace", systemImage: "archivebox")
@@ -196,6 +249,10 @@ struct WorkspaceListView: View {
             return [selected]
         }
         return appState.projects
+    }
+
+    private func workspaces(for projectId: UUID, status: WorkspaceStatus) -> [Workspace] {
+        appState.workspaces(for: projectId).filter { $0.status == status }
     }
 
     private func sessions(workspaceId: UUID, projectId: UUID) -> [ChatSession.Summary] {
