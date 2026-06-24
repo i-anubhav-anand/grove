@@ -1,9 +1,25 @@
 import Foundation
 
-/// Lightweight git change-count for a workspace's worktree. The "is running"
-/// half of status is derived from active streams in AppState; this covers the
-/// "how many files changed" half.
-public enum WorkspaceStatus {
+/// Board status for a workspace — backlog / in-progress / in-review / done.
+///
+/// Also namespaces the lightweight git change-count helpers: the "is running"
+/// half of status is derived from active streams in AppState, and these static
+/// helpers cover the "how many files changed" half.
+public enum WorkspaceStatus: String, Codable, Sendable, CaseIterable {
+    case backlog
+    case inProgress
+    case inReview
+    case done
+
+    /// Title-cased label for section headers and menus.
+    public var label: String {
+        switch self {
+        case .backlog: return "Backlog"
+        case .inProgress: return "In Progress"
+        case .inReview: return "In Review"
+        case .done: return "Done"
+        }
+    }
 
     /// Count changed files from `git status --porcelain` output.
     public static func changedFileCount(porcelain: String) -> Int {
