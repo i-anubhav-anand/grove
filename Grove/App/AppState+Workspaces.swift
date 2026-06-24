@@ -28,13 +28,13 @@ extension AppState {
     }
 
     /// New-chat isolation: give a brand-new chat its own git worktree, branched
-    /// from the project's remote default and named from the prompt, then select it.
+    /// from the project's remote default on a place-name branch, then select it.
     /// Non-git / empty project folders run in place (no worktree). Best-effort:
     /// on failure the chat falls back to the project root.
-    func ensureSessionWorktree(prompt: String, project: Project, in window: WindowState) async {
+    func ensureSessionWorktree(project: Project, in window: WindowState) async {
         let dotGit = URL(fileURLWithPath: project.path).appendingPathComponent(".git").path
         guard FileManager.default.fileExists(atPath: dotGit) else { return }
-        let branch = uniqueBranch(branchName(forPrompt: prompt), projectId: project.id)
+        let branch = placeBranchName(projectId: project.id)
         // Best-effort: if the worktree can't be created, the chat falls back to
         // the project root (selectedWorkspace stays nil).
         if let workspace = try? await createWorkspace(projectId: project.id, branch: branch) {
