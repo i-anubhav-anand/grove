@@ -51,10 +51,13 @@ extension AppState {
     /// launch, on app-activate, and after create/delete — not polled).
     func refreshWorkspaceStatuses() async {
         var counts: [UUID: Int] = [:]
+        var stats: [UUID: DiffStat] = [:]
         for ws in workspaces {
             counts[ws.id] = await WorkspaceStatus.changedFileCount(atPath: ws.worktreePath)
+            stats[ws.id] = await WorkspaceStatus.diffStat(atPath: ws.worktreePath)
         }
         workspaceChangeCounts = counts
+        workspaceDiffStats = stats
     }
 
     /// Load persisted workspaces and drop any whose worktree directory is gone

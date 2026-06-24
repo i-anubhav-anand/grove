@@ -86,6 +86,9 @@ final class AppState {
     /// Cached changed-file count per workspace id (refreshed on launch/activate).
     var workspaceChangeCounts: [UUID: Int] = [:]
 
+    /// Cached +/- line stats per workspace id.
+    var workspaceDiffStats: [UUID: DiffStat] = [:]
+
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
     /// Independent state for all active sessions. Key: sessionId

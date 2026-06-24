@@ -23,16 +23,10 @@ struct WorkspaceListView: View {
                 List {
                     ForEach(visibleProjects) { project in
                         Section {
-                            ForEach(WorkspaceStatus.allCases, id: \.self) { status in
-                                let group = workspaces(for: project.id, status: status)
-                                if !group.isEmpty {
-                                    statusHeader(status, count: group.count)
-                                    ForEach(group) { ws in
-                                        workspaceRow(ws, project: project)
-                                        ForEach(sessions(workspaceId: ws.id, projectId: project.id)) { s in
-                                            sessionRow(s, indented: true)
-                                        }
-                                    }
+                            ForEach(appState.workspaces(for: project.id)) { ws in
+                                workspaceRow(ws, project: project)
+                                ForEach(sessions(workspaceId: ws.id, projectId: project.id)) { s in
+                                    sessionRow(s, indented: true)
                                 }
                             }
                             ForEach(floatingSessions(projectId: project.id)) { s in
@@ -142,14 +136,12 @@ struct WorkspaceListView: View {
                     .lineLimit(1)
             }
             Spacer()
-            if let n = appState.workspaceChangeCounts[ws.id], n > 0 {
-                Text("\(n)")
-                    .font(.system(size: ClaudeTheme.size(9), weight: .bold))
-                    .foregroundStyle(ClaudeTheme.textOnAccent)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(ClaudeTheme.accent, in: Capsule())
-                    .help("\(n) changed file\(n == 1 ? "" : "s")")
+            if let d = appState.workspaceDiffStats[ws.id], !d.isEmpty {
+                HStack(spacing: 3) {
+                    Text("+\(d.added)").foregroundStyle(ClaudeTheme.statusSuccess)
+                    Text("-\(d.deleted)").foregroundStyle(ClaudeTheme.statusError)
+                }
+                .font(.system(size: ClaudeTheme.size(9), weight: .medium, design: .monospaced))
             }
             if workspaceIsStreaming(ws) {
                 ProgressView().controlSize(.mini)
