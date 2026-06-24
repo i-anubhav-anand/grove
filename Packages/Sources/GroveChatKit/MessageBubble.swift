@@ -13,6 +13,7 @@ struct MessageBubble: View {
     @State private var isLongTextExpanded = false
     @State private var hoveredBlockId: String? = nil
     @State private var isHoveringUserBubble = false
+    @State private var processExpanded = false
 
     /// Threshold (character count) for collapsing long text
     private static let longTextThreshold = 500
@@ -68,22 +69,20 @@ struct MessageBubble: View {
                         transientToolSummary(hidden: hidden)
                     }
 
-                    ForEach(visibleBlocks) { block in
-                        if let text = block.text, !text.isEmpty {
-                            assistantTextBubble(text: text, blockId: block.id, hasHiddenTools: !hidden.isEmpty)
+                    // Fold the "process" (leading thinking + tool calls) into a
+                    // collapsible summary; the final answer text renders directly.
+                    let split = Self.splitProcessAndAnswer(visibleBlocks)
+                    let toolCount = split.process.filter { $0.toolCall != nil }.count
+                    let shouldFold = !message.isStreaming && (toolCount >= 1 || split.process.count >= 2)
+
+                    if shouldFold {
+                        processFold(processBlocks: split.process, toolCount: toolCount, hasHiddenTools: !hidden.isEmpty)
+                        ForEach(split.answer) { block in
+                            blockView(block, hasHiddenTools: !hidden.isEmpty)
                         }
-                        if let toolCall = block.toolCall {
-                            if toolCall.name == "AskUserQuestion" {
-                                AskUserQuestionView(toolCall: toolCall)
-                            } else {
-                                ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
-                            }
-                        }
-                        if block.isThinking {
-                            ThinkingBlockView(
-                                block: block,
-                                isMessageStreaming: message.isStreaming
-                            )
+                    } else {
+                        ForEach(visibleBlocks) { block in
+                            blockView(block, hasHiddenTools: !hidden.isEmpty)
                         }
                     }
                 }
@@ -107,6 +106,76 @@ struct MessageBubble: View {
             if message.role == .assistant {
                 Spacer(minLength: 40)
             }
+        }
+    }
+
+    // MARK: - Process Fold (thinking + tool calls collapsed)
+
+    /// Split an assistant message's blocks into the leading "process" (thinking +
+    /// tool calls + intermediate text) and the trailing answer text.
+    static func splitProcessAndAnswer(_ blocks: [MessageBlock]) -> (process: [MessageBlock], answer: [MessageBlock]) {
+        var i = blocks.count
+        while i > 0, let t = blocks[i - 1].text, !t.isEmpty { i -= 1 }
+        return (Array(blocks[0..<i]), Array(blocks[i...]))
+    }
+
+    private func foldLabel(toolCount: Int, total: Int) -> String {
+        if toolCount > 0 {
+            let t = "\(toolCount) tool call\(toolCount == 1 ? "" : "s")"
+            let m = "\(total) message\(total == 1 ? "" : "s")"
+            return "\(t), \(m)"
+        }
+        return "\(total) step\(total == 1 ? "" : "s")"
+    }
+
+    @ViewBuilder
+    private func processFold(processBlocks: [MessageBlock], toolCount: Int, hasHiddenTools: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { processExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: processExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: ClaudeTheme.messageSize(9), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Text(foldLabel(toolCount: toolCount, total: processBlocks.count))
+                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                    Image(systemName: "terminal")
+                        .font(.system(size: ClaudeTheme.messageSize(10)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.vertical, 3)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if processExpanded {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(processBlocks) { block in
+                        blockView(block, hasHiddenTools: hasHiddenTools)
+                    }
+                }
+                .padding(.leading, 10)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: MessageBlock, hasHiddenTools: Bool) -> some View {
+        if let text = block.text, !text.isEmpty {
+            assistantTextBubble(text: text, blockId: block.id, hasHiddenTools: hasHiddenTools)
+        }
+        if let toolCall = block.toolCall {
+            if toolCall.name == "AskUserQuestion" {
+                AskUserQuestionView(toolCall: toolCall)
+            } else {
+                ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
+            }
+        }
+        if block.isThinking {
+            ThinkingBlockView(block: block, isMessageStreaming: message.isStreaming)
         }
     }
 
