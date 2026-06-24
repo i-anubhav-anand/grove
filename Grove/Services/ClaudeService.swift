@@ -422,8 +422,8 @@ actor ClaudeService {
             "--include-partial-messages",
         ]
 
-        if permissionMode != .default {
-            args += ["--permission-mode", permissionMode.rawValue]
+        if let cliMode = permissionMode.cliPermissionMode {
+            args += ["--permission-mode", cliMode]
         }
 
         if !permissionMode.skipsHookPipeline {

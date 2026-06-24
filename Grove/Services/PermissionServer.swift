@@ -227,6 +227,12 @@ actor PermissionServer {
         // "Answer questions?" error result.
         if req.toolName == "AskUserQuestion" { return nil }
 
+        // Auto mode: approve every tool without prompting (AskUserQuestion still
+        // needs a real answer, handled above). Grove still sees/records the calls.
+        if let sid = req.sessionId, sessionRegistry[sid]?.mode == .auto {
+            return "Auto mode"
+        }
+
         if let sid = req.sessionId,
            sessionToolAllows.contains(Self.sessionToolKey(sid: sid, tool: req.toolName)) {
             return "Tool allowed for session by user"
