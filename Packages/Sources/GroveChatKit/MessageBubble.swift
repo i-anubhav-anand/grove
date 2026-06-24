@@ -192,8 +192,8 @@ struct MessageBubble: View {
                 PlainActivityRow(item: .toolCall(toolCall))
             }
         }
-        if block.isThinking {
-            ThinkingBlockView(block: block, isMessageStreaming: message.isStreaming)
+        if block.isThinking, let text = block.thinking, !text.isEmpty {
+            PlainActivityRow(item: .thinking(id: block.id, text: text, duration: block.thinkingDuration))
         }
     }
 
