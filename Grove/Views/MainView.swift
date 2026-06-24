@@ -433,9 +433,15 @@ struct InspectorPanel: View {
     }
 
     /// Working directory for the right-panel tabs: the selected workspace's
-    /// worktree, falling back to the project root.
+    /// worktree, falling back to the project root. The workspace is only honored
+    /// when it belongs to the selected project — otherwise a stale workspace from
+    /// a previously-selected project would point the panel at the wrong repo.
     private var workspaceCwd: String? {
-        windowState.selectedWorkspace?.worktreePath ?? windowState.selectedProject?.path
+        if let ws = windowState.selectedWorkspace,
+           ws.projectId == windowState.selectedProject?.id {
+            return ws.worktreePath
+        }
+        return windowState.selectedProject?.path
     }
 
     var body: some View {
