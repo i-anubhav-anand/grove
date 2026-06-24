@@ -1894,6 +1894,10 @@ final class AppState {
         // one @Observable notification instead of N removeValue calls.
         withAnimation(nil) {
             window.selectedProject = project
+            // The previously-selected workspace belongs to the old project; clear
+            // it so the right-panel tabs (Files/Changes/Terminal) follow the new
+            // project's root instead of a stale worktree.
+            window.selectedWorkspace = nil
             sessionStates = sessionStates.filter { $0.value.isStreaming }
             window.currentSessionId = nil
             startNewChat(in: window)
