@@ -151,6 +151,11 @@ actor ClaudeService {
     private func resolvedEnvironment() async -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = await resolvedShellPath()
+        // Grove authenticates via claude.ai OAuth. If ANTHROPIC_API_KEY is set
+        // in the user's shell environment the CLI treats it as the auth source
+        // (takes precedence over the login session) and fails with "Invalid API
+        // key" when the key is expired or from a different account.
+        env.removeValue(forKey: "ANTHROPIC_API_KEY")
         return env
     }
 
