@@ -6,6 +6,7 @@ struct ToolResultView: View {
     var isMessageStreaming: Bool = false
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
+    @State private var outputExpanded = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -87,16 +88,9 @@ struct ToolResultView: View {
                 } else if isBashTool, bashCommand != nil {
                     bashTerminalView
                 } else if let result = toolCall.result, !result.isEmpty {
-                    ScrollView {
-                        Text(result)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 200)
-                    .padding(8)
-                    .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
+                    resultText(result)
+                        .padding(8)
+                        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
         }
@@ -141,19 +135,51 @@ struct ToolResultView: View {
                 }
             }
             if let result = toolCall.result, !result.isEmpty {
-                ScrollView {
-                    Text(result)
-                        .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                        .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 220)
+                resultText(result)
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Expanded tool/command output rendered inline (no inner scroll view — so
+    /// hovering never traps the page scroll). Long output is capped to a sane
+    /// number of lines with a Show more / Show less toggle.
+    private static let outputLineCap = 40
+
+    @ViewBuilder
+    private func resultText(_ result: String) -> some View {
+        let lines = result.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let needsToggle = lines.count > Self.outputLineCap
+        let shown = (needsToggle && !outputExpanded) ? Array(lines.prefix(Self.outputLineCap)) : lines
+        VStack(alignment: .leading, spacing: 6) {
+            Text(shown.joined(separator: "\n"))
+                .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if needsToggle {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { outputExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Group {
+                            if outputExpanded {
+                                Text("Show less", bundle: .module)
+                            } else {
+                                Text("Show more", bundle: .module)
+                            }
+                        }
+                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                        Image(systemName: outputExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
+                    }
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private func editHunksFromToolInput() -> [PreviewFile.EditHunk] {
