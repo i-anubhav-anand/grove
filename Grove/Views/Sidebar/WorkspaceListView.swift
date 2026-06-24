@@ -160,7 +160,7 @@ struct WorkspaceListView: View {
     private func sessionRow(_ summary: ChatSession.Summary, project: Project) -> some View {
         let workspace = summary.workspaceId.flatMap { wid in appState.workspaces.first { $0.id == wid } }
         let isCurrent = appState.currentSession(in: windowState)?.id == summary.id
-        let streaming = appState.backgroundStreamingSessionIds(in: windowState).contains(summary.id)
+        let streaming = appState.isStreaming(summary.id)
         return HStack(spacing: 8) {
             if let ws = workspace {
                 Image(systemName: "arrow.triangle.branch")

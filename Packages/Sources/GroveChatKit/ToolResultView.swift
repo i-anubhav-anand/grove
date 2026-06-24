@@ -6,6 +6,7 @@ struct ToolResultView: View {
     var isMessageStreaming: Bool = false
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
+    @State private var isResultExpanded = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -124,15 +125,7 @@ struct ToolResultView: View {
                     bashTerminalView
                 } else if let result = toolCall.result, !result.isEmpty {
                     ClaudeThemeDivider()
-
-                    ScrollView {
-                        Text(result)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 200)
+                    resultTextView(result)
                 }
             }
         }
@@ -140,6 +133,48 @@ struct ToolResultView: View {
         .onChange(of: toolCall.result) { _, newResult in
             guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
             isExpanded = false
+        }
+    }
+
+    // MARK: - Result Text (no inner ScrollView — avoids stealing scroll events)
+
+    private static let resultLineThreshold = 20
+
+    @ViewBuilder
+    private func resultTextView(_ result: String, monospaced: Bool = false, color: Color = ClaudeTheme.textPrimary) -> some View {
+        let lines = result.components(separatedBy: .newlines)
+        let needsToggle = lines.count > Self.resultLineThreshold
+        let visibleText = needsToggle && !isResultExpanded
+            ? lines.prefix(Self.resultLineThreshold).joined(separator: "\n")
+            : result
+        VStack(alignment: .leading, spacing: 0) {
+            Text(visibleText)
+                .font(monospaced ? .system(size: ClaudeTheme.messageSize(12), design: .monospaced) : .system(.caption))
+                .foregroundStyle(color)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if needsToggle {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isResultExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Group {
+                            if isResultExpanded {
+                                Text("Show less", bundle: .module)
+                            } else {
+                                Text("Show more", bundle: .module)
+                            }
+                        }
+                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                        Image(systemName: isResultExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
+                    }
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -178,14 +213,7 @@ struct ToolResultView: View {
                 }
             }
             if let result = toolCall.result, !result.isEmpty {
-                ScrollView {
-                    Text(result)
-                        .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                        .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: 220)
+                resultTextView(result, monospaced: true, color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
             }
         }
         .padding(10)

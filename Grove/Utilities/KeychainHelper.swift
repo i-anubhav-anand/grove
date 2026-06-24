@@ -22,24 +22,55 @@ enum KeychainHelper {
         return runSecurity(args)
     }
 
-    // MARK: - Write / Delete (SecItem API — own app items)
+    // MARK: - Read / Write / Delete (SecItem API — own app items)
 
-    nonisolated static func save(_ data: Data, service: String, account: String) throws {
+    /// Reads an item this app created. Uses the SecItem API (not the `security`
+    /// CLI) so the read comes from the Grove process the keychain ACL already
+    /// trusts — no login-password popup. Use this for Grove's own items; use
+    /// `read*` above only for items created by other apps.
+    nonisolated static func readOwn(service: String, account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+        var result: AnyObject?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
 
-        let updateAttributes: [String: Any] = [kSecValueData as String: data]
-        var status = SecItemUpdate(query as CFDictionary, updateAttributes as CFDictionary)
+    nonisolated static func save(_ data: Data, service: String, account: String) throws {
+        // Delete first so the item is always (re-)created by the current process.
+        // SecItemUpdate preserves the old ACL (tied to the binary that created the
+        // item), which causes a password prompt whenever a differently-signed binary
+        // (ad-hoc builds, re-installs) tries to read it. By deleting and re-adding
+        // we can attach a fresh ACL that allows any application on the unlocked Mac
+        // to read the token without prompting — appropriate for a developer OAuth
+        // token stored in the user's login keychain.
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
 
-        if status == errSecItemNotFound {
-            var addQuery = query
-            addQuery[kSecValueData as String] = data
-            status = SecItemAdd(addQuery as CFDictionary, nil)
-        }
+        // SecAccessCreate with an empty trusted-applications list means
+        // "all applications are trusted" on macOS — no per-app ACL prompt.
+        var access: SecAccess?
+        SecAccessCreate("Grove GitHub token" as CFString, [] as CFArray, &access)
 
+        var addQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked,
+        ]
+        if let access { addQuery[kSecAttrAccess as String] = access }
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw KeychainError.operationFailed(status)
         }

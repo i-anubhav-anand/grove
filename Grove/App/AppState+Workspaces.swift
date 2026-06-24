@@ -118,7 +118,11 @@ extension AppState {
         let saved = await persistence.loadWorkspaces()
         let fm = FileManager.default
         let alive = saved.filter { fm.fileExists(atPath: $0.worktreePath) }
-        if alive.count != saved.count {
+        // Persist the pruned list only for partial drops. If *every* saved
+        // worktree is missing, the storage root likely moved (a migration) rather
+        // than the user deleting them all — don't overwrite the file with [] and
+        // lose the records. Keep them on disk so they remain recoverable.
+        if alive.count != saved.count && !alive.isEmpty {
             try? await persistence.saveWorkspaces(alive)
         }
         return alive

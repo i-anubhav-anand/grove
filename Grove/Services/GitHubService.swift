@@ -175,11 +175,23 @@ actor GitHubService {
     }
 
     func loadToken() -> String? {
-        guard let token = KeychainHelper.readString(service: keychainService, account: keychainAccount) else {
+        guard let token = KeychainHelper.readOwn(service: keychainService, account: keychainAccount) else {
             return nil
         }
         self.accessToken = token
+        // Re-save so the item is owned by the current process with
+        // kSecAttrAccessibleWhenUnlocked — fixes ACL mismatch from old items
+        // created by the security CLI or a differently-signed binary.
+        try? saveToken(token)
         return token
+    }
+
+    /// Returns the in-memory token, loading it from the keychain on first use.
+    /// Kept off the launch path so the keychain (and its password prompt) is only
+    /// touched when a GitHub call actually needs the token — never during startup.
+    @discardableResult
+    func ensureToken() -> String? {
+        accessToken ?? loadToken()
     }
 
     func deleteToken() throws {
@@ -296,7 +308,7 @@ actor GitHubService {
     // MARK: - Clone
 
     func cloneRepo(_ repo: GitHubRepo, to path: String) async throws {
-        guard let token = accessToken else {
+        guard let token = ensureToken() else {
             throw GitHubError.noAccessToken
         }
 
@@ -336,7 +348,7 @@ actor GitHubService {
         method: String = "GET",
         body: Data? = nil
     ) async throws -> T {
-        guard let token = accessToken else {
+        guard let token = ensureToken() else {
             throw GitHubError.noAccessToken
         }
 

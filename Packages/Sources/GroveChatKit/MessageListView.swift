@@ -142,10 +142,13 @@ struct MessageListView: View {
 
     @ViewBuilder
     private func messageRows(_ messages: some RandomAccessCollection<ChatMessage>) -> some View {
-        let groups = groupMessages(Array(messages))
+        // Settled list: collapse each completed turn's intermediate activity
+        // (tool calls + narration) into a single summary, leaving the final
+        // answer visible. The live-streaming path uses its own grouping.
+        let groups = groupSettledTurns(Array(messages))
         ForEach(groups) { group in
             if group.isTransientGroup {
-                TransientGroupSummaryView(messages: group.messages)
+                TurnActivitySummaryView(messages: group.messages)
                     .id(group.id)
             } else if let message = group.messages.first {
                 MessageBubble(message: message)
@@ -270,6 +273,74 @@ fileprivate func groupMessages(_ messages: [ChatMessage], minGroupSize: Int = 2)
     return result
 }
 
+// MARK: - Turn-Aware Settled Grouping
+
+fileprivate func messageHasVisibleText(_ message: ChatMessage) -> Bool {
+    message.blocks.contains {
+        guard let text = $0.text else { return false }
+        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+/// IDs of the trailing text-only assistant messages that make up each turn's
+/// final answer. Everything else in a completed turn is intermediate activity
+/// (tool calls + narration) that collapses into a single summary.
+fileprivate func finalAnswerMessageIDs(in messages: [ChatMessage]) -> Set<UUID> {
+    func isTurnMember(_ m: ChatMessage) -> Bool {
+        m.role == .assistant && !m.isError && !m.isCompactBoundary && !m.isStreaming
+    }
+    var ids: Set<UUID> = []
+    var i = 0
+    while i < messages.count {
+        guard isTurnMember(messages[i]) else { i += 1; continue }
+        var j = i
+        while j < messages.count && isTurnMember(messages[j]) { j += 1 }
+        // Walk back from the turn's end over messages that are text with no
+        // tool calls — those form the final answer.
+        var k = j - 1
+        while k >= i, messageHasVisibleText(messages[k]), messages[k].blocks.compactMap(\.toolCall).isEmpty {
+            ids.insert(messages[k].id)
+            k -= 1
+        }
+        i = j
+    }
+    return ids
+}
+
+/// Settled-list grouping: every intermediate (non-final-answer) assistant
+/// message of a completed turn folds into one collapsible summary. Final
+/// answers, user messages, errors, and compact boundaries render as-is.
+fileprivate func groupSettledTurns(_ messages: [ChatMessage]) -> [MessageGroup] {
+    let finalAnswers = finalAnswerMessageIDs(in: messages)
+    var result: [MessageGroup] = []
+    var accumulator: [ChatMessage] = []
+
+    func isCollapsibleIntermediate(_ m: ChatMessage) -> Bool {
+        guard m.role == .assistant, !m.isError, !m.isCompactBoundary, !m.isStreaming else { return false }
+        guard !finalAnswers.contains(m.id) else { return false }
+        return messageHasVisibleText(m) || !m.blocks.compactMap(\.toolCall).isEmpty
+    }
+
+    func flush() {
+        guard !accumulator.isEmpty else { return }
+        result.append(MessageGroup(id: accumulator[0].id, messages: accumulator, isTransientGroup: true))
+        accumulator = []
+    }
+
+    for message in messages {
+        if isCollapsibleIntermediate(message) {
+            accumulator.append(message)
+        } else if isInvisibleMessage(message) {
+            continue
+        } else {
+            flush()
+            result.append(MessageGroup(id: message.id, messages: [message], isTransientGroup: false))
+        }
+    }
+    flush()
+    return result
+}
+
 // MARK: - Shared Helper
 
 /// Returns the start index of the last consecutive non-error assistant sequence.
@@ -372,6 +443,58 @@ struct TransientGroupSummaryView: View {
 
                 if isExpanded {
                     ForEach(allToolCalls, id: \.id) { toolCall in
+                        ToolResultView(toolCall: toolCall, isMessageStreaming: false)
+                    }
+                }
+            }
+            Spacer(minLength: 40)
+        }
+    }
+}
+
+// MARK: - Turn Activity Summary (settled turns — collapsed by default)
+
+/// Collapses a completed turn's intermediate activity into a single header
+/// ("N tool calls · M messages"). Collapsed by default so the final answer is
+/// what you read; expand to see every tool call and intermediate message.
+struct TurnActivitySummaryView: View {
+    let messages: [ChatMessage]
+    @State private var isExpanded = false
+
+    private var toolCallCount: Int {
+        messages.reduce(0) { $0 + $1.blocks.compactMap(\.toolCall).count }
+    }
+
+    private var summaryLabel: String {
+        let tools = String(format: String(localized: "%lld tool calls", bundle: .module), toolCallCount)
+        let msgs = String(format: String(localized: "%lld messages", bundle: .module), messages.count)
+        return "\(tools) · \(msgs)"
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        isExpanded.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                        Text(summaryLabel)
+                            .font(.system(size: ClaudeTheme.size(12)))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded {
+                    let toolCalls = messages.flatMap { $0.blocks.compactMap(\.toolCall) }
+                    ForEach(toolCalls, id: \.id) { toolCall in
                         ToolResultView(toolCall: toolCall, isMessageStreaming: false)
                     }
                 }

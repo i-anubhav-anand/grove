@@ -516,6 +516,12 @@ final class AppState {
         return sessionStates[sessionId]?.isStreaming ?? false
     }
 
+    /// Whether a session is currently streaming, regardless of whether it's the
+    /// foreground session in this window. Used by the sidebar's running indicator.
+    func isStreaming(_ sessionId: String) -> Bool {
+        sessionStates[sessionId]?.isStreaming ?? false
+    }
+
     /// Returns the set of session IDs currently streaming in the background of this window.
     func backgroundStreamingSessionIds(in window: WindowState) -> Set<String> {
         let currentKey = window.currentSessionId ?? window.newSessionKey
@@ -561,7 +567,9 @@ final class AppState {
         if let cachedUser = await persistence.loadGitHubUser() {
             gitHubUser = cachedUser
             isLoggedIn = true
-            _ = await github.loadToken()
+            // The token is loaded lazily on the first GitHub call (see
+            // GitHubService.ensureToken). Touching the keychain here would block
+            // launch behind the macOS password prompt and delay session loading.
         }
 
         // Load all session summaries (excluding message bodies). Merges
@@ -2035,8 +2043,29 @@ final class AppState {
     /// CLI wins on duplicate id. Legacy sessions disappear once migrated to jsonl.
     private func mergedSummaries(for project: Project) async -> [ChatSession.Summary] {
         async let legacy = persistence.loadLegacySessions(for: project.id)
-        async let cli = cliStore.loadSummaries(cwd: project.path, projectId: project.id)
-        let (cliResult, legacyResult) = await (cli, legacy)
+
+        // Scan the repo root plus every workspace worktree cwd — a chat runs
+        // inside its worktree, so its jsonl lives under that path, not the root.
+        let pid = project.id
+        let rootCwd = project.path
+        let worktrees = workspaces.filter { $0.projectId == pid }.map { (cwd: $0.worktreePath, wid: $0.id) }
+        let cliResult: [ChatSession.Summary] = await withTaskGroup(of: [ChatSession.Summary].self) { group in
+            group.addTask { await self.cliStore.loadSummaries(cwd: rootCwd, projectId: pid) }
+            for wt in worktrees {
+                group.addTask {
+                    var summaries = await self.cliStore.loadSummaries(cwd: wt.cwd, projectId: pid)
+                    for i in summaries.indices where summaries[i].workspaceId == nil {
+                        summaries[i].workspaceId = wt.wid
+                    }
+                    return summaries
+                }
+            }
+            var collected: [ChatSession.Summary] = []
+            for await batch in group { collected.append(contentsOf: batch) }
+            return collected
+        }
+
+        let legacyResult = await legacy
         let cliIDs = Set(cliResult.map { $0.id })
         return (cliResult + legacyResult.filter { !cliIDs.contains($0.id) })
             .sorted { $0.updatedAt > $1.updatedAt }
@@ -2049,10 +2078,29 @@ final class AppState {
         let (legacy, meta) = await (legacyAcrossAll, metaCache)
 
         let snapshot = projects
+        // A chat runs inside its workspace's git worktree, so the CLI stores its
+        // jsonl under the worktree cwd — not the repo root. Scan every workspace
+        // path too, or worktree-backed sessions vanish from the sidebar on reload.
+        var scanTargets: [(cwd: String, projectId: UUID, workspaceId: UUID?)] = []
+        for project in snapshot {
+            scanTargets.append((project.path, project.id, nil))
+            for ws in workspaces where ws.projectId == project.id {
+                scanTargets.append((ws.worktreePath, project.id, ws.id))
+            }
+        }
+
         let cli: [ChatSession.Summary] = await withTaskGroup(of: [ChatSession.Summary].self) { group in
-            for project in snapshot {
+            for target in scanTargets {
                 group.addTask {
-                    await self.cliStore.loadSummaries(cwd: project.path, projectId: project.id, metaCache: meta)
+                    var summaries = await self.cliStore.loadSummaries(
+                        cwd: target.cwd, projectId: target.projectId, metaCache: meta
+                    )
+                    if let wid = target.workspaceId {
+                        for i in summaries.indices where summaries[i].workspaceId == nil {
+                            summaries[i].workspaceId = wid
+                        }
+                    }
+                    return summaries
                 }
             }
             var collected: [ChatSession.Summary] = []
