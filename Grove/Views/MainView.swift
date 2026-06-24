@@ -425,7 +425,7 @@ struct InspectorPanel: View {
         switch tab {
         case .terminal: terminalFocusID = UUID()
         case .memo: memoFocusID = UUID()
-        case .changes, .checks: break
+        case .changes, .checks, .review: break
         }
     }
 
@@ -495,6 +495,10 @@ struct InspectorPanel: View {
             )
             .frame(maxHeight: windowState.inspectorTab == .checks ? .infinity : 0)
             .clipped()
+
+            ReviewPaneView()
+                .frame(maxHeight: windowState.inspectorTab == .review ? .infinity : 0)
+                .clipped()
 
             InspectorMemoPanel(projectId: windowState.selectedProject?.id,
                                clearTrigger: memoClearID,

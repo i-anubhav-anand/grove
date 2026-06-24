@@ -215,6 +215,34 @@ actor GitHubService {
         return allRepos
     }
 
+    // MARK: - Pull Request Review
+
+    /// Find the open pull request whose head branch matches `branch` in `repoFullName`
+    /// ("owner/repo"). Returns nil if no matching open PR exists.
+    func fetchPullRequest(repoFullName: String, branch: String) async throws -> PullRequest? {
+        let parts = repoFullName.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        let owner = String(parts[0])
+        let repo = String(parts[1])
+        let head = "\(owner):\(branch)"
+        let encodedHead = head.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? head
+        let prs: [PullRequest] = try await apiRequest(
+            path: "/repos/\(owner)/\(repo)/pulls?state=open&head=\(encodedHead)&per_page=20"
+        )
+        return prs.first
+    }
+
+    /// Fetch the inline (diff) review comments for a pull request.
+    func fetchReviewComments(repoFullName: String, pullNumber: Int) async throws -> [PRReviewComment] {
+        let parts = repoFullName.split(separator: "/")
+        guard parts.count == 2 else { return [] }
+        let owner = String(parts[0])
+        let repo = String(parts[1])
+        return try await apiRequest(
+            path: "/repos/\(owner)/\(repo)/pulls/\(pullNumber)/comments?per_page=100"
+        )
+    }
+
     // MARK: - SSH Setup
 
     /// Generate or reuse an SSH key and return the public key contents.
@@ -325,6 +353,56 @@ actor GitHubService {
         } catch {
             throw GitHubError.decodingError(error.localizedDescription)
         }
+    }
+}
+
+// MARK: - Pull Request Models
+
+/// A pull request, as returned by GET /repos/{owner}/{repo}/pulls.
+struct PullRequest: Decodable, Sendable, Identifiable {
+    let number: Int
+    let title: String
+    let htmlUrl: String
+
+    var id: Int { number }
+
+    enum CodingKeys: String, CodingKey {
+        case number, title
+        case htmlUrl = "html_url"
+    }
+}
+
+/// An inline review comment on a pull request diff.
+struct PRReviewComment: Decodable, Sendable, Identifiable {
+    let id: Int
+    let body: String
+    let path: String
+    /// Line number in the diff's new file; nil if the comment is on outdated code.
+    let line: Int?
+    let originalLine: Int?
+    let author: String
+    let htmlUrl: String
+
+    /// Best-available line number to reference (current line, else original).
+    var displayLine: Int? { line ?? originalLine }
+
+    enum CodingKeys: String, CodingKey {
+        case id, body, path, line, user
+        case originalLine = "original_line"
+        case htmlUrl = "html_url"
+    }
+
+    private struct User: Decodable { let login: String }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        body = try c.decode(String.self, forKey: .body)
+        path = try c.decode(String.self, forKey: .path)
+        line = try c.decodeIfPresent(Int.self, forKey: .line)
+        originalLine = try c.decodeIfPresent(Int.self, forKey: .originalLine)
+        htmlUrl = try c.decode(String.self, forKey: .htmlUrl)
+        author = (try? c.decode(User.self, forKey: .user))?.login ?? "unknown"
     }
 }
 

@@ -10,6 +10,8 @@ public struct FileDiffView: View {
     @State private var diffLines: [DiffLine] = []
     @State private var isLoading = true
     @State private var isCopied = false
+    @State private var selectedLineIndex: Int?
+    @State private var commentText = ""
 
     public init(filePath: String, fileName: String, editHunks: [PreviewFile.EditHunk] = []) {
         self.filePath = filePath
@@ -22,6 +24,10 @@ public struct FileDiffView: View {
             header
             ClaudeThemeDivider()
             contentArea
+            if !isLoading && !diffLines.isEmpty {
+                ClaudeThemeDivider()
+                commentBar
+            }
         }
         .background(ClaudeTheme.background)
         .background {
@@ -116,15 +122,85 @@ public struct FileDiffView: View {
     }
 
     private var diffContentView: some View {
-        DiffTextRenderer(lines: diffLines)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(ClaudeTheme.codeBackground)
+        DiffTextRenderer(lines: diffLines) { index in
+            // Only commentable on real source lines, not hunk/meta headers.
+            if let index, let line = diffLines[safe: index],
+               line.kind != .hunk, line.kind != .meta {
+                selectedLineIndex = index
+            } else {
+                selectedLineIndex = nil
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ClaudeTheme.codeBackground)
+    }
+
+    // MARK: - Comment Bar
+
+    private var selectedDisplayLine: Int? {
+        guard let index = selectedLineIndex, let line = diffLines[safe: index] else { return nil }
+        return line.lineNumber ?? (index + 1)
+    }
+
+    @ViewBuilder
+    private var commentBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "text.bubble")
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+
+            if let displayLine = selectedDisplayLine {
+                Text("Line \(displayLine)", bundle: .module)
+                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.accent)
+                    .fixedSize()
+
+                TextField(text: $commentText) {
+                    Text("Comment on this line…", bundle: .module)
+                }
+                .textFieldStyle(.plain)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textPrimary)
+                .onSubmit(submitComment)
+
+                Button(action: submitComment) {
+                    Text("Send to chat", bundle: .module)
+                        .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium))
+                }
+                .buttonStyle(.borderless)
+                .disabled(commentText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } else {
+                Text("Click a line in the diff to comment", bundle: .module)
+                    .font(.system(size: ClaudeTheme.messageSize(12)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(ClaudeTheme.surfacePrimary)
+    }
+
+    private func submitComment() {
+        let trimmed = commentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let displayLine = selectedDisplayLine else { return }
+        let prompt = "Address this: \(fileName):\(displayLine) — \(trimmed)"
+        if windowState.inputText.isEmpty {
+            windowState.inputText = prompt
+        } else {
+            windowState.inputText += "\n" + prompt
+        }
+        windowState.requestInputFocus = true
+        commentText = ""
+        windowState.diffFile = nil
     }
 
     // MARK: - Diff Sources
 
     private func loadDiff() async {
         isLoading = true
+        selectedLineIndex = nil
         defer { isLoading = false }
 
         if !editHunks.isEmpty {
@@ -169,19 +245,47 @@ public struct FileDiffView: View {
         guard !raw.isEmpty else { return [] }
         var lines = raw.components(separatedBy: "\n")
         if lines.last == "" { lines.removeLast() }
-        return lines.map { line in
-            if line.hasPrefix("+") && !line.hasPrefix("+++") {
-                return DiffLine(text: line, kind: .added)
+        var oldLine = 0
+        var newLine = 0
+        var result: [DiffLine] = []
+        for line in lines {
+            if line.hasPrefix("@@") {
+                let (o, n) = parseHunkHeader(line)
+                oldLine = o
+                newLine = n
+                result.append(DiffLine(text: line, kind: .hunk))
+            } else if line.hasPrefix("+") && !line.hasPrefix("+++") {
+                result.append(DiffLine(text: line, kind: .added, lineNumber: newLine))
+                newLine += 1
             } else if line.hasPrefix("-") && !line.hasPrefix("---") {
-                return DiffLine(text: line, kind: .removed)
-            } else if line.hasPrefix("@@") {
-                return DiffLine(text: line, kind: .hunk)
+                result.append(DiffLine(text: line, kind: .removed, lineNumber: oldLine))
+                oldLine += 1
             } else if line.hasPrefix("diff ") || line.hasPrefix("index ") || line.hasPrefix("---") || line.hasPrefix("+++") {
-                return DiffLine(text: line, kind: .meta)
+                result.append(DiffLine(text: line, kind: .meta))
+            } else if line.hasPrefix("\\") {
+                // "\ No newline at end of file" — not a real source line.
+                result.append(DiffLine(text: line, kind: .context))
             } else {
-                return DiffLine(text: line, kind: .context)
+                result.append(DiffLine(text: line, kind: .context, lineNumber: newLine))
+                oldLine += 1
+                newLine += 1
             }
         }
+        return result
+    }
+
+    /// Parse `@@ -oldStart,oldCount +newStart,newCount @@` into starting line numbers.
+    nonisolated static func parseHunkHeader(_ header: String) -> (old: Int, new: Int) {
+        var old = 0
+        var new = 0
+        for part in header.split(separator: " ") {
+            if part.hasPrefix("-") {
+                old = Int(part.dropFirst().split(separator: ",").first ?? "") ?? 0
+            } else if part.hasPrefix("+") {
+                new = Int(part.dropFirst().split(separator: ",").first ?? "") ?? 0
+            }
+        }
+        return (old, new)
     }
 }
 
@@ -204,6 +308,15 @@ struct DiffLine {
 
     let text: String
     let kind: Kind
+    /// Actual file line number (new-file side for added/context, old-file side
+    /// for removed). Nil for hunk/meta headers and synthetic edit-preview diffs.
+    var lineNumber: Int? = nil
+}
+
+private extension Array {
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
 }
 
 // MARK: - Shared Indent Utility
@@ -225,6 +338,8 @@ nonisolated func stripCommonIndent(old: [String], new: [String]) -> (old: [Strin
 
 private struct DiffTextRenderer: NSViewRepresentable {
     let lines: [DiffLine]
+    /// Reports the index of the diff line containing the selection/caret (nil if none).
+    var onSelectLine: (Int?) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -270,19 +385,26 @@ private struct DiffTextRenderer: NSViewRepresentable {
         }
 
         scrollView.documentView = textView
+        textView.delegate = context.coordinator
+        context.coordinator.onSelectLine = onSelectLine
         context.coordinator.attach(textView: textView, lines: lines)
         return scrollView
     }
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.onSelectLine = onSelectLine
         context.coordinator.update(textView: textView, lines: lines)
     }
 
-    final class Coordinator {
+    final class Coordinator: NSObject, NSTextViewDelegate {
         private weak var textView: NSTextView?
         private var lastLines: [DiffLine] = []
         private var lastFingerprint: Int = 0
+        /// Character range of each diff line in the rendered string, for caret→line mapping.
+        private var lineRanges: [NSRange] = []
+        private var lastReportedLine: Int?
+        var onSelectLine: (Int?) -> Void = { _ in }
         nonisolated(unsafe) private var themeObserver: NSObjectProtocol?
 
         deinit {
@@ -319,9 +441,22 @@ private struct DiffTextRenderer: NSViewRepresentable {
         }
 
         private func apply(lines: [DiffLine], to textView: NSTextView) {
-            textView.textStorage?.setAttributedString(Self.buildAttributedString(lines: lines))
+            let (attributed, ranges) = Self.buildAttributedString(lines: lines)
+            textView.textStorage?.setAttributedString(attributed)
+            lineRanges = ranges
+            lastReportedLine = nil
             lastLines = lines
             lastFingerprint = fingerprint(of: lines)
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            let location = textView.selectedRange().location
+            let index = lineRanges.firstIndex { NSLocationInRange(location, $0) }
+                ?? (location >= (lineRanges.last.map { $0.location + $0.length } ?? 0) ? lineRanges.indices.last : nil)
+            guard index != lastReportedLine else { return }
+            lastReportedLine = index
+            onSelectLine(index)
         }
 
         private func fingerprint(of lines: [DiffLine]) -> Int {
@@ -338,20 +473,23 @@ private struct DiffTextRenderer: NSViewRepresentable {
             return hasher.finalize()
         }
 
-        private static func buildAttributedString(lines: [DiffLine]) -> NSAttributedString {
+        private static func buildAttributedString(lines: [DiffLine]) -> (NSAttributedString, [NSRange]) {
             let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
             let gutterColor = NSColor(ClaudeTheme.textTertiary).withAlphaComponent(0.6)
-            let gutterDigits = max(String(lines.count).count, 2)
+            let maxNumber = lines.compactMap(\.lineNumber).max() ?? lines.count
+            let gutterDigits = max(String(maxNumber).count, 2)
             let blankPrefix = String(repeating: " ", count: gutterDigits) + "  "
 
             let result = NSMutableAttributedString()
+            var ranges: [NSRange] = []
             for (index, line) in lines.enumerated() {
+                let lineStart = result.length
                 let prefix: String
-                if line.kind == .meta {
+                if line.kind == .meta || line.kind == .hunk {
                     prefix = blankPrefix
                 } else {
-                    let n = String(index + 1)
-                    prefix = String(repeating: " ", count: gutterDigits - n.count) + n + "  "
+                    let n = String(line.lineNumber ?? (index + 1))
+                    prefix = String(repeating: " ", count: max(0, gutterDigits - n.count)) + n + "  "
                 }
                 result.append(NSAttributedString(string: prefix, attributes: [
                     .font: font,
@@ -364,8 +502,9 @@ private struct DiffTextRenderer: NSViewRepresentable {
                 ]
                 let bodyText = (line.text.isEmpty ? " " : line.text) + "\n"
                 result.append(NSAttributedString(string: bodyText, attributes: bodyAttrs))
+                ranges.append(NSRange(location: lineStart, length: result.length - lineStart))
             }
-            return result
+            return (result, ranges)
         }
     }
 }
