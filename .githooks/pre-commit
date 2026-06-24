@@ -1,0 +1,17 @@
+#!/bin/sh
+# Pre-commit gate: the package test suite must pass before any commit lands.
+# Bypass intentionally (e.g. a WIP checkpoint) with:  git commit --no-verify
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+echo "[pre-commit] Running swift test in Packages/ …"
+
+if ! ( cd "$ROOT/Packages" && swift test 2>&1 | tail -25 ); then
+    echo ""
+    echo "[pre-commit] ❌ Tests failed — commit blocked."
+    echo "             Fix the tests, or bypass with: git commit --no-verify"
+    exit 1
+fi
+
+echo "[pre-commit] ✅ Tests passed."
+exit 0
