@@ -1,0 +1,21 @@
+#!/bin/bash
+# Pre-commit gate: the package test suite must pass before any commit lands.
+# Bypass intentionally (e.g. a WIP checkpoint) with:  git commit --no-verify
+
+# Git exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE while a hook runs. Tests
+# that spawn their own throwaway git repos (e.g. GitWorktreeService) would be
+# hijacked by this repo's git env, so clear it before running them. (Also lets
+# `cd Packages` work without `git rev-parse`, which misbehaves in linked worktrees.)
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX
+
+echo "[pre-commit] Running swift test in Packages/ …"
+# Pre-commit hooks run with the working-tree root as the current directory.
+if ( cd Packages && swift test ); then
+    echo "[pre-commit] ✅ Tests passed."
+    exit 0
+else
+    echo ""
+    echo "[pre-commit] ❌ Tests failed — commit blocked."
+    echo "             Fix the tests, or bypass with: git commit --no-verify"
+    exit 1
+fi
