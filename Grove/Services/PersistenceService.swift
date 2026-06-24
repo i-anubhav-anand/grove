@@ -39,6 +39,16 @@ actor PersistenceService {
         return decode([Workspace].self, from: url) ?? []
     }
 
+    func saveSessionWorkspaceBindings(_ map: [String: UUID]) throws {
+        let url = baseURL.appendingPathComponent("session_workspace_bindings.json")
+        try encode(map, to: url)
+    }
+
+    func loadSessionWorkspaceBindings() -> [String: UUID] {
+        let url = baseURL.appendingPathComponent("session_workspace_bindings.json")
+        return decode([String: UUID].self, from: url) ?? [:]
+    }
+
     // MARK: - Sessions
 
     func saveSession(_ session: ChatSession, persistTitle: Bool = false) async throws {
