@@ -89,6 +89,24 @@ final class AppState {
     /// Cached +/- line stats per workspace id.
     var workspaceDiffStats: [UUID: DiffStat] = [:]
 
+    /// Persisted sessionId -> workspaceId binding (the CLI sidecar doesn't carry it).
+    var sessionWorkspaceBindings: [String: UUID] = [:] {
+        didSet {
+            let snapshot = sessionWorkspaceBindings
+            Task { try? await persistence.saveSessionWorkspaceBindings(snapshot) }
+        }
+    }
+
+    /// Apply persisted workspace bindings onto session summaries that don't have one.
+    func injectWorkspaceBindings() {
+        guard !sessionWorkspaceBindings.isEmpty else { return }
+        for i in allSessionSummaries.indices where allSessionSummaries[i].workspaceId == nil {
+            if let wid = sessionWorkspaceBindings[allSessionSummaries[i].id] {
+                allSessionSummaries[i].workspaceId = wid
+            }
+        }
+    }
+
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
     /// Independent state for all active sessions. Key: sessionId
@@ -541,7 +559,9 @@ final class AppState {
         // CLI-backed sessions (~/.claude/projects/...) with the legacy
         // Grove-owned JSON store, preferring CLI-backed when both exist for
         // the same session id.
+        sessionWorkspaceBindings = await persistence.loadSessionWorkspaceBindings()
         allSessionSummaries = await mergedSummariesAcrossProjects()
+        injectWorkspaceBindings()
 
         for project in projects {
             watchProjectDirectory(project)
@@ -1000,7 +1020,7 @@ final class AppState {
 
         if isNewSession {
             let titleText = prompt.count > 50 ? String(prompt.prefix(50)) + "..." : prompt
-            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: titleText, messages: [], origin: .cliBacked)
+            let placeholder = ChatSession(id: sessionKey, projectId: project.id, title: titleText, messages: [], origin: .cliBacked, workspaceId: window.selectedWorkspace?.id)
             allSessionSummaries.insert(placeholder.summary, at: 0)
         } else {
             await saveCurrentSession(in: window)
@@ -1011,7 +1031,7 @@ final class AppState {
             await self.processStream(
                 streamId: streamId,
                 prompt: prompt,
-                cwd: project.path,
+                cwd: window.selectedWorkspace?.worktreePath ?? project.path,
                 cliSessionId: cliSessionId,
                 internalSessionKey: sessionKey,
                 model: window.sessionModel ?? self.selectedModel,
@@ -1222,8 +1242,10 @@ final class AppState {
                                 messages: [],
                                 createdAt: old.createdAt,
                                 updatedAt: Date(),
-                                origin: old.origin
+                                origin: old.origin,
+                                workspaceId: old.workspaceId
                             )
+                            if let wid = old.workspaceId { sessionWorkspaceBindings[sid] = wid }
                             allSessionSummaries.removeAll { $0.id == expectedPlaceholder || $0.id == sid }
                             allSessionSummaries.insert(replacement.summary, at: 0)
                             window.removePendingPlaceholder(expectedPlaceholder)
@@ -1252,7 +1274,8 @@ final class AppState {
                                 } else {
                                     title = "New Session"
                                 }
-                                let newSession = ChatSession(id: sid, projectId: project.id, title: title, messages: [], updatedAt: Date(), origin: .cliBacked)
+                                let newSession = ChatSession(id: sid, projectId: project.id, title: title, messages: [], updatedAt: Date(), origin: .cliBacked, workspaceId: window.selectedWorkspace?.id)
+                                if let wid = window.selectedWorkspace?.id { sessionWorkspaceBindings[sid] = wid }
                                 allSessionSummaries.insert(newSession.summary, at: 0)
                             }
                         }
@@ -2035,6 +2058,7 @@ final class AppState {
         if existing == summaries { return }
         allSessionSummaries.removeAll { $0.projectId == project.id }
         allSessionSummaries.append(contentsOf: summaries)
+        injectWorkspaceBindings()
     }
 
     // MARK: - CLI directory watch
