@@ -192,6 +192,21 @@ struct MainView: View {
                 }
             }
 
+            if let ws = windowState.selectedWorkspace {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: ClaudeTheme.size(10)))
+                    Text(ws.branch)
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(ClaudeTheme.surfacePrimary, in: Capsule())
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .help("Workspace branch")
+            }
+
             Spacer()
         }
         .padding(.horizontal, 16)
