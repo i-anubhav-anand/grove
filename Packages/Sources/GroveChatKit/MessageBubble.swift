@@ -265,6 +265,13 @@ struct MessageBubble: View {
             } else {
                 MarkdownContentView(text: text)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.asymmetric(
+                        insertion: .modifier(
+                            active: EmergeModifier(progress: 0),
+                            identity: EmergeModifier(progress: 1)
+                        ),
+                        removal: .identity
+                    ))
             }
             if message.isStreaming && isLastBlock {
                 Text("|")
@@ -275,6 +282,7 @@ struct MessageBubble: View {
                     .onAppear { cursorVisible = false }
             }
         }
+        .animation(.spring(duration: 0.45, bounce: 0.08), value: message.isStreaming)
         .foregroundStyle(ClaudeTheme.textPrimary)
         .bubbleStyle(.assistant)
         .overlay(alignment: .bottomTrailing) {
@@ -640,6 +648,17 @@ struct FlowLayout: Layout {
             x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+    }
+}
+
+private struct EmergeModifier: ViewModifier {
+    let progress: Double
+    func body(content: Content) -> some View {
+        content
+            .offset(y: (1.0 - progress) * 12)
+            .blur(radius: (1.0 - progress) * 3)
+            .scaleEffect(0.97 + 0.03 * progress, anchor: .top)
+            .opacity(0.2 + 0.8 * progress)
     }
 }
 
