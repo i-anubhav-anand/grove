@@ -543,6 +543,8 @@ final class AppState {
             }
         }
 
+        GroveHome.bootstrap()
+
         projects = await persistence.loadProjects()
         var seenPaths = Set<String>()
         let deduplicated = projects.filter { seenPaths.insert($0.path).inserted }
@@ -550,6 +552,8 @@ final class AppState {
             projects = deduplicated
             try? await persistence.saveProjects(projects)
         }
+
+        await discoverManagedRepos()
 
         workspaces = await loadAndReconcileWorkspaces()
         await refreshWorkspaceStatuses()
@@ -2265,15 +2269,30 @@ final class AppState {
     }
 
     func cloneAndAddProject(_ repo: GitHubRepo, in window: WindowState) async throws {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let clonePath = "\(home)/Grove/\(repo.name)"
-        let parentDir = "\(home)/Grove"
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: parentDir) {
-            try fm.createDirectory(atPath: parentDir, withIntermediateDirectories: true)
-        }
+        try FileManager.default.createDirectory(at: GroveHome.repos, withIntermediateDirectories: true)
+        let clonePath = GroveHome.repos.appendingPathComponent(repo.name, isDirectory: true).path
         try await github.cloneRepo(repo, to: clonePath)
         await addAndSelectProject(name: repo.name, path: clonePath, gitHubRepo: repo.fullName, in: window)
+    }
+
+    /// Filesystem-as-source-of-truth: auto-import any repo folder sitting in
+    /// `~/Grove/repos` that isn't already a project. Lets you drop a repo there
+    /// (or recover after a reset) and have it appear on next launch.
+    func discoverManagedRepos() async {
+        let fm = FileManager.default
+        guard let entries = try? fm.contentsOfDirectory(
+            at: GroveHome.repos,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+        for url in entries {
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue else { continue }
+            if projects.contains(where: { $0.path == url.path }) { continue }
+            let isGit = fm.fileExists(atPath: url.appendingPathComponent(".git").path)
+            let gitHubRepo = isGit ? detectGitHubRepo(at: url.path) : nil
+            await addProject(name: url.lastPathComponent, path: url.path, gitHubRepo: gitHubRepo)
+        }
     }
 
     // MARK: - View Convenience API
@@ -2358,6 +2377,15 @@ final class AppState {
             }
         }
 
+        // Remove this project's worktrees (sessions) first, while the repo still exists.
+        let repoName = URL(fileURLWithPath: project.path).lastPathComponent
+        for ws in workspaces where ws.projectId == project.id {
+            try? await worktreeService.removeWorktree(repo: project.path, path: ws.worktreePath, force: true)
+            workspaceChangeCounts[ws.id] = nil
+        }
+        workspaces.removeAll { $0.projectId == project.id }
+        try? await persistence.saveWorkspaces(workspaces)
+
         // Remove all in-memory session summaries for this project
         allSessionSummaries.removeAll { $0.projectId == project.id }
 
@@ -2370,6 +2398,15 @@ final class AppState {
         } catch {
             logger.error("Failed to save projects after deletion: \(error.localizedDescription)")
         }
+
+        // Delete on disk only when Grove owns the repo (under ~/Grove/repos).
+        // Externally "opened" folders are left untouched. Always clear the
+        // project's worktree directory under ~/Grove/workspaces.
+        let fm = FileManager.default
+        if GroveHome.isManagedRepo(project.path) {
+            try? fm.removeItem(atPath: project.path)
+        }
+        try? fm.removeItem(at: GroveHome.workspaces.appendingPathComponent(repoName, isDirectory: true))
     }
 
     func deleteSession(_ session: ChatSession, in window: WindowState) async {

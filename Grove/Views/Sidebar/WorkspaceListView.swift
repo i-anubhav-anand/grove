@@ -61,7 +61,7 @@ struct WorkspaceListView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { project in
-            Text("Remove “\(project.name)” from Grove? This forgets the workspace and its sessions in Grove. The repo/folder on disk is left untouched.")
+            Text("Remove “\(project.name)” and its sessions? Worktrees are deleted. If Grove created this repo (under ~/Grove/repos) the folder is removed too; an externally opened folder is left in place.")
         }
     }
 

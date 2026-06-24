@@ -42,9 +42,11 @@ extension AppState {
         }
     }
 
-    /// Remove a workspace's worktree and forget it.
+    /// Remove a workspace's worktree and forget it. A `.context` folder in the
+    /// worktree (if any) is preserved under `~/Grove/archived-contexts/<repo>/`.
     func deleteWorkspace(_ workspace: Workspace, force: Bool = false) async throws {
         if let project = projects.first(where: { $0.id == workspace.projectId }) {
+            archiveContext(of: workspace, project: project)
             try await worktreeService.removeWorktree(
                 repo: project.path, path: workspace.worktreePath, force: force
             )
@@ -52,6 +54,23 @@ extension AppState {
         workspaces.removeAll { $0.id == workspace.id }
         workspaceChangeCounts[workspace.id] = nil
         try? await persistence.saveWorkspaces(workspaces)
+    }
+
+    /// Move a worktree's `.context` into `~/Grove/archived-contexts/<repo>/<branch>/`
+    /// before the worktree is removed, so shared context survives an archive.
+    private func archiveContext(of workspace: Workspace, project: Project) {
+        let fm = FileManager.default
+        let src = URL(fileURLWithPath: workspace.worktreePath)
+            .appendingPathComponent(".context", isDirectory: true)
+        guard fm.fileExists(atPath: src.path) else { return }
+        let repoName = URL(fileURLWithPath: project.path).lastPathComponent
+        let destDir = GroveHome.archivedContexts.appendingPathComponent(repoName, isDirectory: true)
+        try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+        let dest = destDir.appendingPathComponent(
+            workspace.branch.replacingOccurrences(of: "/", with: "-"), isDirectory: true
+        )
+        try? fm.removeItem(at: dest)
+        try? fm.moveItem(at: src, to: dest)
     }
 
     /// Make a workspace the active context for a window.
