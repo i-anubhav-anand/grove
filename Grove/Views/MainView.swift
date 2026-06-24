@@ -16,6 +16,7 @@ struct MainView: View {
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
     @State private var renameText: String = ""
+    @State private var showCommandPalette = false
 
     enum SidebarTab: String, CaseIterable {
         case history = "History"
@@ -121,6 +122,14 @@ struct MainView: View {
                 if inspectorStarted {
                     InspectorPanel()
                 }
+            }
+            .overlay {
+                CommandPaletteView(isPresented: $showCommandPalette)
+                    .background {
+                        Button("") { showCommandPalette.toggle() }
+                            .keyboardShortcut("k", modifiers: .command)
+                            .hidden()
+                    }
             }
         }
     }
