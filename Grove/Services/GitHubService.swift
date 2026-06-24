@@ -5,7 +5,9 @@ import Security
 
 actor GitHubService {
 
-    static let oauthClientId = "Ov23liaj3hlJoMGsNZTW"
+    /// Grove's own GitHub OAuth App (owned by the repo owner). Public identifier,
+    /// not a secret. Device Flow uses no client secret.
+    static let oauthClientId = "Ov23liG467TcOKSv663c"
     private let clientId = oauthClientId
     private let logger = Logger(subsystem: "com.claudework", category: "GitHubService")
     private let sshKeyManager = SSHKeyManager()
