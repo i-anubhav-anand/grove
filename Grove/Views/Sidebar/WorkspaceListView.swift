@@ -1,9 +1,9 @@
 import SwiftUI
 import GroveCore
 
-/// Sidebar that groups **Project → Workspaces → Sessions**. Each workspace is a
-/// git worktree on its own branch; selecting one sets `windowState.selectedWorkspace`.
-/// Floating (legacy) sessions with no workspace appear directly under their project.
+/// Sidebar that groups **Workspace (repo/folder) → Sessions**. Each session is one
+/// chat backed by its own git worktree; the row shows the worktree's branch icon
+/// (PR-colored) and diff stats. Selecting a session restores its worktree.
 struct WorkspaceListView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
@@ -23,18 +23,8 @@ struct WorkspaceListView: View {
                 List {
                     ForEach(visibleProjects) { project in
                         Section {
-                            ForEach(appState.workspaces(for: project.id)) { ws in
-                                workspaceRow(ws, project: project)
-                                // Sessions only expand under the selected workspace —
-                                // keeps the list flat and uncluttered otherwise.
-                                if windowState.selectedWorkspace?.id == ws.id {
-                                    ForEach(sessions(workspaceId: ws.id, projectId: project.id)) { s in
-                                        sessionRow(s, indented: true)
-                                    }
-                                }
-                            }
-                            ForEach(floatingSessions(projectId: project.id)) { s in
-                                sessionRow(s, indented: false)
+                            ForEach(sessions(for: project.id)) { summary in
+                                sessionRow(summary, project: project)
                             }
                         } header: {
                             projectHeader(project)
@@ -85,7 +75,7 @@ struct WorkspaceListView: View {
                     .font(.system(size: ClaudeTheme.size(10)))
             }
             .buttonStyle(.borderless)
-            .help("New workspace (git worktree)")
+            .help("New session")
         }
     }
 
@@ -140,70 +130,31 @@ struct WorkspaceListView: View {
 
     // MARK: - Rows
 
-    private func workspaceRow(_ ws: Workspace, project: Project) -> some View {
-        let isSelected = windowState.selectedWorkspace?.id == ws.id
+    /// One row per chat session. Shows the worktree's branch icon (PR-colored) and
+    /// diff stats when the session is backed by a worktree; click selects it.
+    private func sessionRow(_ summary: ChatSession.Summary, project: Project) -> some View {
+        let workspace = summary.workspaceId.flatMap { wid in appState.workspaces.first { $0.id == wid } }
+        let isCurrent = appState.currentSession(in: windowState)?.id == summary.id
+        let streaming = appState.backgroundStreamingSessionIds(in: windowState).contains(summary.id)
         return HStack(spacing: 8) {
-            Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(branchColor(ws))
-                .help(prStateHelp(ws))
-            Text(ws.displayName)
-                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+            if let ws = workspace {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(branchColor(ws))
+                    .help(prStateHelp(ws))
+            }
+            Text(summary.title)
+                .font(.system(size: ClaudeTheme.size(12), weight: isCurrent ? .medium : .regular))
+                .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(1)
-            Spacer()
-            if let d = appState.workspaceDiffStats[ws.id], !d.isEmpty {
+            Spacer(minLength: 4)
+            if let ws = workspace, let d = appState.workspaceDiffStats[ws.id], !d.isEmpty {
                 HStack(spacing: 3) {
                     Text("+\(d.added)").foregroundStyle(ClaudeTheme.statusSuccess)
                     Text("-\(d.deleted)").foregroundStyle(ClaudeTheme.statusError)
                 }
                 .font(.system(size: ClaudeTheme.size(9), weight: .medium, design: .monospaced))
             }
-            if workspaceIsStreaming(ws) {
-                ProgressView().controlSize(.mini)
-            }
-        }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .background(isSelected ? ClaudeTheme.accent.opacity(0.15) : .clear,
-                    in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
-        .onTapGesture { appState.selectWorkspace(ws, in: windowState) }
-        .contextMenu {
-            Button {
-                // startNewChat detaches the workspace; re-select after so this
-                // session stays in `ws` instead of spawning a fresh worktree.
-                appState.startNewChat(in: windowState)
-                appState.selectWorkspace(ws, in: windowState)
-            } label: { Label("New session here", systemImage: "square.and.pencil") }
-            Divider()
-            Menu {
-                ForEach(WorkspaceStatus.allCases, id: \.self) { status in
-                    Button {
-                        appState.setStatus(status, for: ws)
-                    } label: {
-                        if ws.status == status {
-                            Label(status.label, systemImage: "checkmark")
-                        } else {
-                            Text(status.label)
-                        }
-                    }
-                }
-            } label: { Label("Status", systemImage: "circle.dashed") }
-            Divider()
-            Button(role: .destructive) { archive(ws) } label: {
-                Label("Archive workspace", systemImage: "archivebox")
-            }
-        }
-    }
-
-    private func sessionRow(_ summary: ChatSession.Summary, indented: Bool) -> some View {
-        let isCurrent = appState.currentSession(in: windowState)?.id == summary.id
-        let streaming = appState.backgroundStreamingSessionIds(in: windowState).contains(summary.id)
-        return HStack(spacing: 4) {
-            Text(summary.title)
-                .font(.system(size: ClaudeTheme.size(12)))
-                .foregroundStyle(.primary.opacity(0.8))
-                .lineLimit(1)
-            Spacer()
             if streaming { ProgressView().controlSize(.mini) }
             if summary.isPinned {
                 Image(systemName: "pin.fill")
@@ -211,12 +162,19 @@ struct WorkspaceListView: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
         }
-        .padding(.vertical, 1)
-        .padding(.leading, indented ? 18 : 0)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 4)
         .contentShape(Rectangle())
         .background(isCurrent ? ClaudeTheme.accent.opacity(0.15) : .clear,
                     in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         .onTapGesture { appState.selectSession(id: summary.id, in: windowState) }
+        .contextMenu {
+            if let ws = workspace {
+                Button(role: .destructive) { archive(ws) } label: {
+                    Label("Archive worktree", systemImage: "archivebox")
+                }
+            }
+        }
     }
 
     private var emptyState: some View {
@@ -260,26 +218,10 @@ struct WorkspaceListView: View {
         return appState.projects
     }
 
-    private func workspaces(for projectId: UUID, status: WorkspaceStatus) -> [Workspace] {
-        appState.workspaces(for: projectId).filter { $0.status == status }
-    }
-
-    private func sessions(workspaceId: UUID, projectId: UUID) -> [ChatSession.Summary] {
+    /// All chat sessions for a project, pinned first then most-recent.
+    private func sessions(for projectId: UUID) -> [ChatSession.Summary] {
         appState.allSessionSummaries
-            .filter { $0.projectId == projectId && $0.workspaceId == workspaceId }
-            .sorted { $0.updatedAt > $1.updatedAt }
-    }
-
-    private func floatingSessions(projectId: UUID) -> [ChatSession.Summary] {
-        appState.allSessionSummaries
-            .filter { $0.projectId == projectId && $0.workspaceId == nil }
+            .filter { $0.projectId == projectId }
             .sorted { ($0.isPinned ? 1 : 0, $0.updatedAt) > ($1.isPinned ? 1 : 0, $1.updatedAt) }
-    }
-
-    private func workspaceIsStreaming(_ ws: Workspace) -> Bool {
-        let streaming = appState.backgroundStreamingSessionIds(in: windowState)
-        return appState.allSessionSummaries.contains {
-            $0.workspaceId == ws.id && streaming.contains($0.id)
-        }
     }
 }
