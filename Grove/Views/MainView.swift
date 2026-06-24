@@ -416,7 +416,30 @@ struct InspectorPanel: View {
         switch tab {
         case .terminal: terminalFocusID = UUID()
         case .memo: memoFocusID = UUID()
+        case .changes, .review: break
         }
+    }
+
+    /// Working directory for the right-panel tabs: the selected workspace's
+    /// worktree, falling back to the project root.
+    private var workspaceCwd: String? {
+        windowState.selectedWorkspace?.worktreePath ?? windowState.selectedProject?.path
+    }
+
+    @ViewBuilder
+    private var reviewStub: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "checkmark.seal")
+                .font(.system(size: ClaudeTheme.size(22)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Text("Review coming soon")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .background(ClaudeTheme.surfaceElevated)
     }
 
     var body: some View {
@@ -456,10 +479,14 @@ struct InspectorPanel: View {
 
             ClaudeThemeDivider()
 
+            ChangesPaneView(worktreePath: workspaceCwd)
+                .frame(maxHeight: windowState.inspectorTab == .changes ? .infinity : 0)
+                .clipped()
+
             EmbeddedTerminalView(
                 executable: "/bin/zsh",
                 arguments: ["-il"],
-                currentDirectory: windowState.selectedProject?.path,
+                currentDirectory: workspaceCwd,
                 process: inspectorProcess,
                 focusTrigger: terminalFocusID
             )
@@ -468,6 +495,10 @@ struct InspectorPanel: View {
             .background(ClaudeTheme.codeBackground)
             .frame(maxHeight: windowState.inspectorTab == .terminal ? .infinity : 0)
             .clipped()
+
+            reviewStub
+                .frame(maxHeight: windowState.inspectorTab == .review ? .infinity : 0)
+                .clipped()
 
             InspectorMemoPanel(projectId: windowState.selectedProject?.id,
                                clearTrigger: memoClearID,
