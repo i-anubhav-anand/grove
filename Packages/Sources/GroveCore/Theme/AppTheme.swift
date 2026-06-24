@@ -74,37 +74,37 @@ public struct ThemeColors: @unchecked Sendable {
     public var statusRunning: Color { accent }
 }
 
-// MARK: - Claude Theme (warm terracotta)
+// MARK: - Claude Theme (black & warm brown)
 
 extension ThemeColors {
     public static let claude: ThemeColors = {
-        let accent: Color = Color(light: .hex(0xD97757), dark: .hex(0xD97757))
+        let accent: Color = Color(light: .hex(0x7A5540), dark: .hex(0x9E7558))
         return ThemeColors(
             accent:               accent,
-            accentSubtle:         Color(light: .hex(0xD97757).opacity(0.12), dark: .hex(0xD97757).opacity(0.15)),
-            background:           Color(light: .hex(0xF5F4EF), dark: .hex(0x21211E)),
-            surfacePrimary:       Color(light: .hex(0xEDEAE0), dark: .hex(0x2A2A27)),
-            surfaceSecondary:     Color(light: .hex(0xE5E2D9), dark: .hex(0x353530)),
-            surfaceTertiary:      Color(light: .hex(0xDDDAD2), dark: .hex(0x42423D)),
-            surfaceElevated:      Color(light: .hex(0xFAF9F6), dark: .hex(0x2F2F2B)),
-            sidebarBackground:    Color(light: .hex(0xEDEAE2), dark: .hex(0x1C1C1A)),
-            sidebarItemHover:     Color(light: .hex(0xE0DDD4), dark: .hex(0x2A2A27)),
-            sidebarItemSelected:  Color(light: .hex(0xD97757).opacity(0.12), dark: .hex(0xD97757).opacity(0.15)),
-            textPrimary:          Color(light: .hex(0x3C3929), dark: .hex(0xCCC9C0)),
-            textSecondary:        Color(light: .hex(0x6B6960), dark: .hex(0x9A978E)),
-            textTertiary:         Color(light: .hex(0x9A978E), dark: .hex(0x76766E)),
-            border:               Color(light: .hex(0xD5D2C8), dark: .hex(0x3B3B36)),
-            borderSubtle:         Color(light: .hex(0xE0DDD4), dark: .hex(0x2F2F2B)),
-            codeBackground:       Color(light: .hex(0xE8E5DC), dark: .hex(0x1A1A18)),
-            codeHeaderBackground: Color(light: .hex(0xDDD9CF), dark: .hex(0x252523)),
-            userBubble:           Color(light: .hex(0x3C3929), dark: .hex(0x42423D)),
-            userBubbleText:       Color(light: .hex(0xF5F4EF), dark: .hex(0xE8E5DC)),
-            assistantBubble:      Color(light: .hex(0xE8E5DC), dark: .hex(0x2A2A27)),
+            accentSubtle:         Color(light: .hex(0x7A5540).opacity(0.12), dark: .hex(0x9E7558).opacity(0.15)),
+            background:           Color(light: .hex(0xF2F0EB), dark: .hex(0x181715)),
+            surfacePrimary:       Color(light: .hex(0xE8E5DC), dark: .hex(0x222120)),
+            surfaceSecondary:     Color(light: .hex(0xDFDCD3), dark: .hex(0x2C2B29)),
+            surfaceTertiary:      Color(light: .hex(0xD6D3CB), dark: .hex(0x363532)),
+            surfaceElevated:      Color(light: .hex(0xF7F5F1), dark: .hex(0x272624)),
+            sidebarBackground:    Color(light: .hex(0xE8E5DD), dark: .hex(0x131210)),
+            sidebarItemHover:     Color(light: .hex(0xDAD7CE), dark: .hex(0x222120)),
+            sidebarItemSelected:  Color(light: .hex(0x7A5540).opacity(0.12), dark: .hex(0x9E7558).opacity(0.15)),
+            textPrimary:          Color(light: .hex(0x2A2820), dark: .hex(0xCCC8BE)),
+            textSecondary:        Color(light: .hex(0x625E54), dark: .hex(0x98948A)),
+            textTertiary:         Color(light: .hex(0x96928A), dark: .hex(0x6A6660)),
+            border:               Color(light: .hex(0xCECBC1), dark: .hex(0x333230)),
+            borderSubtle:         Color(light: .hex(0xDAD7CE), dark: .hex(0x272624)),
+            codeBackground:       Color(light: .hex(0xE3E0D8), dark: .hex(0x111110)),
+            codeHeaderBackground: Color(light: .hex(0xD8D5CC), dark: .hex(0x1C1B1A)),
+            userBubble:           Color(light: .hex(0x2A2820), dark: .hex(0x36332F)),
+            userBubbleText:       Color(light: .hex(0xF2F0EB), dark: .hex(0xE3E0D8)),
+            assistantBubble:      Color(light: .hex(0xE3E0D8), dark: .hex(0x222120)),
             statusSuccess:        Color(light: .hex(0x5A9A6E), dark: .hex(0x7AAC8C)),
             statusError:          Color(light: .hex(0xB85C50), dark: .hex(0xC47060)),
-            statusWarning:        Color(light: .hex(0xC78A40), dark: .hex(0xD9A757)),
-            inputBackground:      Color(light: .hex(0xFAF9F6), dark: .hex(0x2A2A27)),
-            inputBorder:          Color(light: .hex(0xD5D2C8), dark: .hex(0x3B3B36))
+            statusWarning:        Color(light: .hex(0xA07030), dark: .hex(0xC09050)),
+            inputBackground:      Color(light: .hex(0xF7F5F1), dark: .hex(0x222120)),
+            inputBorder:          Color(light: .hex(0xCECBC1), dark: .hex(0x333230))
         )
     }()
 }
