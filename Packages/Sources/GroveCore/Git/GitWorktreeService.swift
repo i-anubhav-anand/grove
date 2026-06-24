@@ -33,9 +33,7 @@ public actor GitWorktreeService {
     private let baseDir: URL
 
     public init(baseDir: URL? = nil) {
-        self.baseDir = baseDir ?? FileManager.default
-            .homeDirectoryForCurrentUser
-            .appendingPathComponent(".grove/worktrees", isDirectory: true)
+        self.baseDir = baseDir ?? GroveHome.workspaces
     }
 
     // MARK: - Public API

@@ -304,6 +304,8 @@ struct MainView: View {
         panel.nameFieldLabel = "Project name:"
         panel.nameFieldStringValue = "new-project"
         panel.canCreateDirectories = true
+        try? FileManager.default.createDirectory(at: GroveHome.repos, withIntermediateDirectories: true)
+        panel.directoryURL = GroveHome.repos
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             do {
