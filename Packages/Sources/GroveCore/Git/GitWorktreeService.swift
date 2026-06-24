@@ -42,9 +42,21 @@ public actor GitWorktreeService {
 
     /// Create an isolated worktree for `branch` off the given repo.
     /// Returns the absolute path of the new worktree (the agent's working directory).
+    ///
+    /// When `baseRef` is nil (the default), the worktree branches from the repo's
+    /// remote default branch (`origin/HEAD`) so it always starts from a clean tree
+    /// matching the remote, independent of whatever the main checkout currently has
+    /// checked out. Pass an explicit ref to override.
     @discardableResult
-    public func createWorktree(repo: String, branch: String, baseRef: String = "HEAD") async throws -> String {
+    public func createWorktree(repo: String, branch: String, baseRef: String? = nil) async throws -> String {
         try await ensureGitRepo(repo)
+
+        let base: String
+        if let baseRef {
+            base = baseRef
+        } else {
+            base = await resolveBaseRef(repo: repo)
+        }
 
         let repoName = URL(fileURLWithPath: repo).lastPathComponent
         let dest = baseDir
@@ -59,10 +71,24 @@ public actor GitWorktreeService {
         // `git worktree add -b <branch> <path> <baseRef>` creates the branch and
         // checks it out into an isolated directory in one atomic step.
         _ = try await runGit(
-            ["worktree", "add", "-b", branch, dest.path, baseRef],
+            ["worktree", "add", "-b", branch, dest.path, base],
             cwd: repo
         )
         return dest.path
+    }
+
+    /// Pick the best base for a new worktree: the remote default branch
+    /// (`origin/HEAD`), falling back through common remote names and finally local
+    /// `HEAD` for repos without a remote. Branching from the remote default keeps
+    /// new workspaces clean and independent of the main checkout's current state —
+    /// the same strategy Claude Code's own worktrees use.
+    private func resolveBaseRef(repo: String) async -> String {
+        for ref in ["origin/HEAD", "origin/main", "origin/master"] {
+            if (try? await runGit(["rev-parse", "--verify", "--quiet", ref], cwd: repo)) != nil {
+                return ref
+            }
+        }
+        return "HEAD"
     }
 
     /// List every worktree attached to the repo (parses `--porcelain` output).
