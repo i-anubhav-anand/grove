@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Image attachments now reach the model.** Attached/pasted/dropped images were
+  only referenced as a `[Attached image: <path>]` text line, so the CLI never
+  received the actual image (the path was often a temp file deleted after the
+  turn). Images are now sent as base64 image blocks in the stream-json user
+  message — with magic-byte media-type detection and PNG transcoding for
+  clipboard TIFF / unsupported containers.
 - Pre-commit hook: corrected a `tail`-pipe that masked `swift test`'s exit code,
   and cleared `GIT_*` hook env that was corrupting `core.bare` when worktree
   tests ran.

@@ -268,7 +268,8 @@ actor ClaudeService {
         model: String? = nil,
         effort: String? = nil,
         hookSettingsPath: String? = nil,
-        permissionMode: PermissionMode = .default
+        permissionMode: PermissionMode = .default,
+        imageBlocks: [ImageBlock] = []
     ) -> AsyncStream<StreamEvent> {
         let stdin = Pipe()
         let stdout = Pipe()
@@ -297,6 +298,7 @@ actor ClaudeService {
                         effort: effort,
                         hookSettingsPath: hookSettingsPath,
                         permissionMode: permissionMode,
+                        imageBlocks: imageBlocks,
                         stdinPipe: stdin,
                         stdoutPipe: stdout,
                         stderrPipe: stderr,
@@ -469,6 +471,7 @@ actor ClaudeService {
         effort: String? = nil,
         hookSettingsPath: String?,
         permissionMode: PermissionMode = .default,
+        imageBlocks: [ImageBlock] = [],
         stdinPipe: Pipe,
         stdoutPipe: Pipe,
         stderrPipe: Pipe,
@@ -522,14 +525,27 @@ actor ClaudeService {
             self.processes[streamId] = proc
             self.stdinHandles[streamId] = stdinHandle
 
-            // Send the initial user prompt as an NDJSON user message.
+            // Send the initial user prompt as an NDJSON user message. Image attachments
+            // ride along as base64 image blocks so the model actually sees them — a text
+            // path reference alone never reaches the model's vision input.
+            var content: [[String: Any]] = imageBlocks.map { block in
+                [
+                    "type": "image",
+                    "source": [
+                        "type": "base64",
+                        "media_type": block.mediaType,
+                        "data": block.base64,
+                    ],
+                ]
+            }
+            if !prompt.isEmpty || content.isEmpty {
+                content.append(["type": "text", "text": prompt])
+            }
             let userMessage: [String: Any] = [
                 "type": "user",
                 "message": [
                     "role": "user",
-                    "content": [
-                        ["type": "text", "text": prompt]
-                    ]
+                    "content": content,
                 ]
             ]
             try Self.writeJSONLine(userMessage, to: stdinHandle)

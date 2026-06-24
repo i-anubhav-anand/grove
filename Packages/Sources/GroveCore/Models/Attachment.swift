@@ -48,6 +48,23 @@ public struct Attachment: Identifiable, Sendable {
     }
 }
 
+// MARK: - Image Block
+
+/// A single image ready to send to the `claude` CLI as a base64 content block.
+/// `sourceID` links back to the originating `Attachment` so the text prompt can
+/// drop the redundant `[Attached image: …]` line for images sent this way.
+public struct ImageBlock: Sendable {
+    public let sourceID: UUID
+    public let mediaType: String
+    public let base64: String
+
+    public init(sourceID: UUID, mediaType: String, base64: String) {
+        self.sourceID = sourceID
+        self.mediaType = mediaType
+        self.base64 = base64
+    }
+}
+
 // MARK: - Attachment Factory
 
 public enum AttachmentFactory {
@@ -126,5 +143,45 @@ public enum AttachmentFactory {
         let name = "Pasted text (\(lineCount) lines, \(charCount) chars\(suffix))"
 
         return Attachment(type: .text, name: name, textContent: truncated)
+    }
+
+    // MARK: - Image Blocks
+
+    /// Convert image attachments into base64 content blocks the `claude` CLI can render.
+    /// Non-image attachments and images whose bytes can't be turned into a supported
+    /// format are skipped (they keep their textual `[Attached …]` reference instead).
+    public static func imageBlocks(from attachments: [Attachment]) -> [ImageBlock] {
+        attachments.compactMap(imageBlock(for:))
+    }
+
+    public static func imageBlock(for attachment: Attachment) -> ImageBlock? {
+        guard attachment.type == .image, let data = attachment.imageData else { return nil }
+        if let mediaType = nativeImageMediaType(for: data) {
+            return ImageBlock(sourceID: attachment.id, mediaType: mediaType, base64: data.base64EncodedString())
+        }
+        // Unsupported container (TIFF, BMP, HEIC, clipboard TIFF, …) — transcode to PNG.
+        guard let png = pngData(from: data) else { return nil }
+        return ImageBlock(sourceID: attachment.id, mediaType: "image/png", base64: png.base64EncodedString())
+    }
+
+    /// The Claude API accepts png, jpeg, gif, and webp. Detect by magic bytes rather than
+    /// file extension — clipboard images are TIFF bytes regardless of the `.png` name we give them.
+    static func nativeImageMediaType(for data: Data) -> String? {
+        let bytes = [UInt8](data.prefix(12))
+        guard bytes.count >= 4 else { return nil }
+        if bytes.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return "image/png" }
+        if bytes.starts(with: [0xFF, 0xD8, 0xFF]) { return "image/jpeg" }
+        if bytes.starts(with: [0x47, 0x49, 0x46, 0x38]) { return "image/gif" } // "GIF8"
+        if bytes.count >= 12,
+           bytes.starts(with: [0x52, 0x49, 0x46, 0x46]),          // "RIFF"
+           Array(bytes[8..<12]) == [0x57, 0x45, 0x42, 0x50] {     // "WEBP"
+            return "image/webp"
+        }
+        return nil
+    }
+
+    private static func pngData(from data: Data) -> Data? {
+        guard let rep = NSBitmapImageRep(data: data) else { return nil }
+        return rep.representation(using: .png, properties: [:])
     }
 }
