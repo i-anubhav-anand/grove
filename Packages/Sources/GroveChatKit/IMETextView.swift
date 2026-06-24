@@ -217,6 +217,14 @@ fileprivate final class _IMETextView: NSTextView {
         super.doCommand(by: selector)
     }
 
+    // Advertise that this (plain-text) view can read image types. Without this,
+    // AppKit disables `paste:` for an image-only clipboard, so ⌘V is a no-op and
+    // our handler never runs — only text/file pastes (which carry a string type)
+    // would work. With it, `paste(_:)` fires and onPasteCommandV attaches the image.
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        super.readablePasteboardTypes + [.png, .tiff]
+    }
+
     override func paste(_ sender: Any?) {
         if onPasteCommandV() { return }
         super.paste(sender)
