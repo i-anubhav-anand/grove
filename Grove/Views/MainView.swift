@@ -416,7 +416,7 @@ struct InspectorPanel: View {
         switch tab {
         case .terminal: terminalFocusID = UUID()
         case .memo: memoFocusID = UUID()
-        case .changes, .review: break
+        case .changes, .checks: break
         }
     }
 
@@ -424,22 +424,6 @@ struct InspectorPanel: View {
     /// worktree, falling back to the project root.
     private var workspaceCwd: String? {
         windowState.selectedWorkspace?.worktreePath ?? windowState.selectedProject?.path
-    }
-
-    @ViewBuilder
-    private var reviewStub: some View {
-        VStack(spacing: 8) {
-            Spacer()
-            Image(systemName: "checkmark.seal")
-                .font(.system(size: ClaudeTheme.size(22)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-            Text("Review coming soon")
-                .font(.system(size: ClaudeTheme.size(12)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .background(ClaudeTheme.surfaceElevated)
     }
 
     var body: some View {
@@ -496,9 +480,12 @@ struct InspectorPanel: View {
             .frame(maxHeight: windowState.inspectorTab == .terminal ? .infinity : 0)
             .clipped()
 
-            reviewStub
-                .frame(maxHeight: windowState.inspectorTab == .review ? .infinity : 0)
-                .clipped()
+            ChecksPaneView(
+                worktreePath: windowState.selectedWorkspace?.worktreePath,
+                branch: windowState.selectedWorkspace?.branch
+            )
+            .frame(maxHeight: windowState.inspectorTab == .checks ? .infinity : 0)
+            .clipped()
 
             InspectorMemoPanel(projectId: windowState.selectedProject?.id,
                                clearTrigger: memoClearID,
