@@ -407,29 +407,294 @@ struct StreamingMessageView: View {
     }
 }
 
+// MARK: - Activity Item
+
+/// A single item in the activity summary list — either a tool call or a thinking block.
+fileprivate enum ActivityItem: Identifiable {
+    case toolCall(ToolCall)
+    case thinking(id: String, text: String, duration: TimeInterval?)
+
+    var id: String {
+        switch self {
+        case .toolCall(let tc): return tc.id
+        case .thinking(let blockId, _, _): return blockId
+        }
+    }
+}
+
+fileprivate func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
+    messages.flatMap { msg in
+        msg.blocks.compactMap { block -> ActivityItem? in
+            if let tc = block.toolCall { return .toolCall(tc) }
+            if let t = block.thinking, !t.isEmpty {
+                return .thinking(id: block.id, text: t, duration: block.thinkingDuration)
+            }
+            return nil
+        }
+    }
+}
+
+// MARK: - Plain Activity Row
+
+/// Card-free row for the activity summary list. The row is plain text with a
+/// hover highlight; clicking expands an inline scrollable content card.
+fileprivate struct PlainActivityRow: View {
+    let item: ActivityItem
+    @State private var isExpanded = false
+    @State private var isHovered = false
+    @State private var isContentExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            rowHeader
+            if isExpanded {
+                rowContent.padding(.leading, 20)
+            }
+        }
+    }
+
+    // MARK: Header
+
+    private var rowHeader: some View {
+        HStack(spacing: 6) {
+            rowIcon
+                .font(.system(size: ClaudeTheme.messageSize(11)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .frame(width: 14, alignment: .leading)
+            rowLabel
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 2)
+        .padding(.horizontal, 4)
+        .background(
+            isHovered ? ClaudeTheme.surfacePrimary.opacity(0.5) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 4)
+        )
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }
+    }
+
+    @ViewBuilder
+    private var rowIcon: some View {
+        if isHovered {
+            Image(systemName: isExpanded ? "minus" : "plus")
+        } else if case .thinking = item {
+            Image(systemName: "brain")
+        } else if case .toolCall(let tc) = item {
+            Image(systemName: symbol(for: tc.name.lowercased()))
+        }
+    }
+
+    @ViewBuilder
+    private var rowLabel: some View {
+        if case .thinking(_, let text, _) = item {
+            Text("Thinking")
+                .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .layoutPriority(1)
+            Text(text.prefix(100).replacingOccurrences(of: "\n", with: " "))
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        } else if case .toolCall(let tc) = item {
+            Text(label(for: tc))
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+    }
+
+    // MARK: Expanded content
+
+    @ViewBuilder
+    private var rowContent: some View {
+        if case .thinking(_, let text, _) = item {
+            Text(text)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if case .toolCall(let tc) = item {
+            toolContent(tc)
+        }
+    }
+
+    @ViewBuilder
+    private func toolContent(_ tc: ToolCall) -> some View {
+        let lower = tc.name.lowercased()
+        if lower == "bash", let cmd = tc.input["command"]?.stringValue {
+            bashCard(cmd: cmd, result: tc.result, isError: tc.isError)
+        } else if (lower == "edit" || lower == "multiedit" || lower == "multi_edit"),
+                  let old = tc.input["old_string"]?.stringValue,
+                  let new = tc.input["new_string"]?.stringValue {
+            diffCard(old: old, new: new)
+        } else if let result = tc.result, !result.isEmpty {
+            resultCard(result)
+        }
+    }
+
+    // MARK: Cards
+
+    private func bashCard(cmd: String, result: String?, isError: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                Text("$")
+                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .bold, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.accent)
+                Text(cmd)
+                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let r = result, !r.isEmpty {
+                ScrollView {
+                    Text(r)
+                        .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                        .foregroundStyle(isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 180)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func resultCard(_ result: String) -> some View {
+        // The Read tool's result already arrives in `cat -n` format (line numbers
+        // baked in), so we render the raw text in a scrollable monospace card
+        // rather than adding a second column of numbers.
+        ScrollView {
+            Text(result)
+                .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxHeight: 200)
+        .padding(10)
+        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private func diffCard(old: String, new: String) -> some View {
+        let removedLines = old.components(separatedBy: .newlines).map { ("-", $0, false) }
+        let addedLines = new.components(separatedBy: .newlines).map { ("+", $0, true) }
+        let allLines = removedLines + addedLines
+        let threshold = 14
+        let visible = isContentExpanded ? allLines : Array(allLines.prefix(threshold))
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(visible.enumerated()), id: \.offset) { _, triple in
+                let (pfx, txt, isAdded) = triple
+                Text(pfx + " " + txt)
+                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                    .foregroundStyle(isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 1)
+                    .background((isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError).opacity(0.06))
+            }
+            if allLines.count > threshold {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { isContentExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(isContentExpanded ? "Show less" : "Show more", bundle: .module)
+                        Image(systemName: isContentExpanded ? "chevron.up" : "chevron.down")
+                    }
+                    .font(.system(size: ClaudeTheme.messageSize(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    // MARK: Label / symbol helpers
+
+    private func label(for tc: ToolCall) -> String {
+        let lower = tc.name.lowercased()
+        switch lower {
+        case "read":
+            let name = tc.input["file_path"]?.stringValue.map { URL(fileURLWithPath: $0).lastPathComponent } ?? ""
+            if let result = tc.result {
+                let lineCount = result.components(separatedBy: .newlines).count
+                return name.isEmpty ? "Read \(lineCount) lines" : "Read \(lineCount) lines — \(name)"
+            }
+            return name.isEmpty ? "Read" : "Read — \(name)"
+        case "bash":
+            if let cmd = tc.input["command"]?.stringValue {
+                let trimmed = cmd.trimmingCharacters(in: .whitespacesAndNewlines)
+                return String(trimmed.prefix(70))
+            }
+            return "Run command"
+        case "edit", "multiedit", "multi_edit":
+            if let path = tc.input["file_path"]?.stringValue {
+                return "Edit — \(URL(fileURLWithPath: path).lastPathComponent)"
+            }
+            return "Edit"
+        case "write":
+            if let path = tc.input["file_path"]?.stringValue {
+                return "Write — \(URL(fileURLWithPath: path).lastPathComponent)"
+            }
+            return "Write"
+        case "grep":
+            if let pat = tc.input["pattern"]?.stringValue { return "grep — \(pat.prefix(50))" }
+            return "Search"
+        case "glob":
+            if let pat = tc.input["pattern"]?.stringValue ?? tc.input["path"]?.stringValue {
+                return "Find — \(pat.prefix(50))"
+            }
+            return "Find files"
+        case "agent":
+            return tc.input["description"]?.stringValue ?? "Agent"
+        default:
+            return tc.name
+        }
+    }
+
+    private func symbol(for lower: String) -> String {
+        switch lower {
+        case "read":                             return "doc.text"
+        case "bash":                             return "terminal"
+        case "edit", "multiedit", "multi_edit":  return "pencil"
+        case "write":                            return "square.and.pencil"
+        case "grep", "glob":                     return "magnifyingglass"
+        case "agent":                            return "cpu"
+        default:                                 return "wrench"
+        }
+    }
+}
+
 // MARK: - Transient Group Summary
 
 struct TransientGroupSummaryView: View {
     let messages: [ChatMessage]
     @State private var isExpanded = false
 
-    private var allToolCalls: [ToolCall] {
-        messages.flatMap { $0.blocks.compactMap(\.toolCall) }
+    private var toolCallCount: Int {
+        messages.reduce(0) { $0 + $1.blocks.compactMap(\.toolCall).count }
     }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "eye.slash")
                             .font(.system(size: ClaudeTheme.size(11)))
                             .foregroundStyle(ClaudeTheme.textTertiary)
-                        Text(String(format: String(localized: "%lld tools executed", bundle: .module), allToolCalls.count))
+                        Text(String(format: String(localized: "%lld tools executed", bundle: .module), toolCallCount))
                             .font(.system(size: ClaudeTheme.size(12)))
                             .foregroundStyle(ClaudeTheme.textTertiary)
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -442,8 +707,9 @@ struct TransientGroupSummaryView: View {
                 .buttonStyle(.plain)
 
                 if isExpanded {
-                    ForEach(allToolCalls, id: \.id) { toolCall in
-                        ToolResultView(toolCall: toolCall, isMessageStreaming: false)
+                    let items = activityItems(from: messages)
+                    ForEach(items) { item in
+                        PlainActivityRow(item: item)
                     }
                 }
             }
@@ -456,7 +722,7 @@ struct TransientGroupSummaryView: View {
 
 /// Collapses a completed turn's intermediate activity into a single header
 /// ("N tool calls · M messages"). Collapsed by default so the final answer is
-/// what you read; expand to see every tool call and intermediate message.
+/// what you read; expand to see each tool call and thinking block.
 struct TurnActivitySummaryView: View {
     let messages: [ChatMessage]
     @State private var isExpanded = false
@@ -475,9 +741,7 @@ struct TurnActivitySummaryView: View {
         HStack(alignment: .top, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        isExpanded.toggle()
-                    }
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
@@ -493,9 +757,9 @@ struct TurnActivitySummaryView: View {
                 .buttonStyle(.plain)
 
                 if isExpanded {
-                    let toolCalls = messages.flatMap { $0.blocks.compactMap(\.toolCall) }
-                    ForEach(toolCalls, id: \.id) { toolCall in
-                        ToolResultView(toolCall: toolCall, isMessageStreaming: false)
+                    let items = activityItems(from: messages)
+                    ForEach(items) { item in
+                        PlainActivityRow(item: item)
                     }
                 }
             }
