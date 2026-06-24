@@ -258,8 +258,8 @@ struct MessageBubble: View {
         return HStack(alignment: .bottom, spacing: 0) {
             if message.isStreaming && isLastBlock {
                 Text(text)
-                    .font(.system(size: ClaudeTheme.messageSize(15)))
-                    .lineSpacing(4)
+                    .font(.system(size: ClaudeTheme.messageSize(12)))
+                    .lineSpacing(3)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -275,14 +275,14 @@ struct MessageBubble: View {
             }
             if message.isStreaming && isLastBlock {
                 Text("|")
-                    .font(.system(size: ClaudeTheme.messageSize(15), weight: .light))
+                    .font(.system(size: ClaudeTheme.messageSize(12), weight: .light))
                     .foregroundStyle(ClaudeTheme.accent)
                     .opacity(cursorVisible ? 1 : 0)
                     .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: cursorVisible)
                     .onAppear { cursorVisible = false }
             }
         }
-        .animation(.spring(duration: 0.45, bounce: 0.08), value: message.isStreaming)
+        .animation(.spring(duration: 0.7, bounce: 0.1), value: message.isStreaming)
         .foregroundStyle(ClaudeTheme.textPrimary)
         .bubbleStyle(.assistant)
         .overlay(alignment: .bottomTrailing) {

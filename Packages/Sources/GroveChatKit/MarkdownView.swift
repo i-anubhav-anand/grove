@@ -144,7 +144,7 @@ struct MarkdownContentView: View {
             current.append(sep)
         }
 
-        func appendPrefixed(prefix: String, content: String, contentColor: Color? = nil, thinSep: Bool = false, prefixFont: Font = .system(size: 15)) {
+        func appendPrefixed(prefix: String, content: String, contentColor: Color? = nil, thinSep: Bool = false, prefixFont: Font = .system(size: 12)) {
             addNewline(thinSpacing: thinSep)
             var prefixAttr = AttributedString(prefix)
             prefixAttr.font = prefixFont
@@ -207,7 +207,7 @@ struct MarkdownContentView: View {
                 let isFirstBullet = hasContent && !inListOrQuote
                 afterSpacer = false
                 inListOrQuote = true
-                appendPrefixed(prefix: "  \u{2022} ", content: content, thinSep: isFirstBullet)
+                appendPrefixed(prefix: "  \u{2022} ", content: content, thinSep: isFirstBullet, prefixFont: .system(size: 12))
 
             case .orderedListItem(let number, let content):
                 if hasContent && afterSpacer && inListOrQuote {
@@ -216,7 +216,7 @@ struct MarkdownContentView: View {
                 let isFirstOrdered = hasContent && !inListOrQuote
                 afterSpacer = false
                 inListOrQuote = true
-                appendPrefixed(prefix: "  \(number). ", content: content, thinSep: isFirstOrdered, prefixFont: .system(size: 15).monospacedDigit())
+                appendPrefixed(prefix: "  \(number). ", content: content, thinSep: isFirstOrdered, prefixFont: .system(size: 12).monospacedDigit())
 
             case .blockquote(let content):
                 if quoteHasContent {
@@ -252,12 +252,12 @@ struct MarkdownContentView: View {
 
     private static func fontForHeading(_ level: Int) -> Font {
         switch level {
-        case 1: return .system(size: 20, weight: .bold)
-        case 2: return .system(size: 18, weight: .bold)
-        case 3: return .system(size: 16, weight: .semibold)
-        case 4: return .system(size: 15, weight: .semibold)
-        case 5: return .system(size: 15, weight: .medium)
-        default: return .system(size: 15, weight: .medium)
+        case 1: return .system(size: 17, weight: .bold)
+        case 2: return .system(size: 15, weight: .bold)
+        case 3: return .system(size: 13, weight: .semibold)
+        case 4: return .system(size: 12, weight: .semibold)
+        case 5: return .system(size: 12, weight: .medium)
+        default: return .system(size: 12, weight: .medium)
         }
     }
 
@@ -506,7 +506,7 @@ private func parseInlineMarkdown(_ content: String) -> AttributedString {
     var codeRanges: [Range<AttributedString.Index>] = []
     for run in result.runs {
         guard let intent = run.inlinePresentationIntent else {
-            result[run.range].font = .system(size: 15)
+            result[run.range].font = .system(size: 12)
             continue
         }
         if intent.contains(.code) {
@@ -515,16 +515,16 @@ private func parseInlineMarkdown(_ content: String) -> AttributedString {
             let isBold = intent.contains(.stronglyEmphasized)
             let isItalic = intent.contains(.emphasized)
             switch (isBold, isItalic) {
-            case (true, true):  result[run.range].font = .system(size: 15, weight: .bold).italic()
-            case (true, false): result[run.range].font = .system(size: 15, weight: .bold)
-            case (false, true): result[run.range].font = .system(size: 15).italic()
-            default:            result[run.range].font = .system(size: 15)
+            case (true, true):  result[run.range].font = .system(size: 12, weight: .bold).italic()
+            case (true, false): result[run.range].font = .system(size: 12, weight: .bold)
+            case (false, true): result[run.range].font = .system(size: 12).italic()
+            default:            result[run.range].font = .system(size: 12)
             }
         }
     }
     // Inline code spans: monospace font + background color
     for range in codeRanges.reversed() {
-        result[range].font = .system(size: 14, design: .monospaced)
+        result[range].font = .system(size: 11, design: .monospaced)
         result[range].foregroundColor = ClaudeTheme.textPrimary
         result[range].backgroundColor = ClaudeTheme.surfaceTertiary
         result[range].baselineOffset = 0.5
