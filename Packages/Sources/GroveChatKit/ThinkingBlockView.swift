@@ -26,14 +26,6 @@ struct ThinkingBlockView: View {
             header
             if isExpanded { body(content: thinkingText) }
         }
-        .background(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .fill(ClaudeTheme.surfacePrimary.opacity(0.5))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
-        )
         .onHover { isHovering = $0 }
         .onChange(of: block.thinkingDuration) { _, newValue in
             // Auto-collapse on stream completion, but only if the user has not
@@ -46,6 +38,12 @@ struct ThinkingBlockView: View {
 
     private var thinkingText: String {
         block.thinking ?? ""
+    }
+
+    /// First line of the thought, for the collapsed one-liner preview.
+    private var oneLinePreview: String {
+        let text = (block.thinking ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.split(separator: "\n").first.map(String.init) ?? text
     }
 
     private var header: some View {
@@ -61,6 +59,14 @@ struct ThinkingBlockView: View {
                 headerLabel
                     .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textSecondary)
+                    .fixedSize()
+                if !isExpanded, !block.isThinkingRedacted, !oneLinePreview.isEmpty {
+                    Text(oneLinePreview)
+                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 Spacer(minLength: 6)
                 if !block.isThinkingRedacted {
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -68,8 +74,8 @@ struct ThinkingBlockView: View {
                         .foregroundStyle(ClaudeTheme.textTertiary)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 5)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
