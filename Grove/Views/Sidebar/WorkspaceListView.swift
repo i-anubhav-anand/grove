@@ -10,6 +10,8 @@ struct WorkspaceListView: View {
 
     @State private var creatingForProject: Project?
     @State private var pendingArchive: Workspace?
+    @State private var pendingDeleteSession: ChatSession.Summary?
+    @State private var pendingDeleteProject: Project?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -45,6 +47,22 @@ struct WorkspaceListView: View {
         } message: { ws in
             Text("The worktree for “\(ws.displayName)” has uncommitted changes (or couldn't be removed cleanly). Force-remove it and discard those changes?")
         }
+        .alert("Delete session?", isPresented: deleteSessionAlertBinding, presenting: pendingDeleteSession) { summary in
+            Button("Delete", role: .destructive) {
+                Task { await deleteSessionAndWorktree(summary) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { summary in
+            Text("Delete “\(summary.title)” and its worktree? The chat history and any uncommitted changes in the worktree are removed. This can't be undone.")
+        }
+        .alert("Delete workspace?", isPresented: deleteProjectAlertBinding, presenting: pendingDeleteProject) { project in
+            Button("Delete", role: .destructive) {
+                Task { await appState.deleteProject(project, in: windowState) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { project in
+            Text("Remove “\(project.name)” from Grove? This forgets the workspace and its sessions in Grove. The repo/folder on disk is left untouched.")
+        }
     }
 
     // MARK: - Header
@@ -76,6 +94,13 @@ struct WorkspaceListView: View {
             }
             .buttonStyle(.borderless)
             .help("New session")
+        }
+        .contextMenu {
+            Button(role: .destructive) {
+                pendingDeleteProject = project
+            } label: {
+                Label("Delete workspace", systemImage: "trash")
+            }
         }
     }
 
@@ -170,9 +195,14 @@ struct WorkspaceListView: View {
         .onTapGesture { appState.selectSession(id: summary.id, in: windowState) }
         .contextMenu {
             if let ws = workspace {
-                Button(role: .destructive) { archive(ws) } label: {
+                Button { archive(ws) } label: {
                     Label("Archive worktree", systemImage: "archivebox")
                 }
+            }
+            Button(role: .destructive) {
+                pendingDeleteSession = summary
+            } label: {
+                Label("Delete session", systemImage: "trash")
             }
         }
     }
@@ -207,6 +237,22 @@ struct WorkspaceListView: View {
 
     private var archiveAlertBinding: Binding<Bool> {
         Binding(get: { pendingArchive != nil }, set: { if !$0 { pendingArchive = nil } })
+    }
+
+    private var deleteSessionAlertBinding: Binding<Bool> {
+        Binding(get: { pendingDeleteSession != nil }, set: { if !$0 { pendingDeleteSession = nil } })
+    }
+
+    private var deleteProjectAlertBinding: Binding<Bool> {
+        Binding(get: { pendingDeleteProject != nil }, set: { if !$0 { pendingDeleteProject = nil } })
+    }
+
+    /// Delete a session's chat history and, if it has one, its worktree.
+    private func deleteSessionAndWorktree(_ summary: ChatSession.Summary) async {
+        if let wid = summary.workspaceId, let ws = appState.workspaces.first(where: { $0.id == wid }) {
+            try? await appState.deleteWorkspace(ws, force: true)
+        }
+        await appState.deleteSession(summary.makeSession(), in: windowState)
     }
 
     // MARK: - Data
