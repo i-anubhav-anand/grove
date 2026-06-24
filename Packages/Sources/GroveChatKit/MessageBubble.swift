@@ -189,7 +189,7 @@ struct MessageBubble: View {
             if toolCall.name == "AskUserQuestion" {
                 AskUserQuestionView(toolCall: toolCall)
             } else {
-                ToolResultView(toolCall: toolCall, isMessageStreaming: message.isStreaming)
+                PlainActivityRow(item: .toolCall(toolCall))
             }
         }
         if block.isThinking {
@@ -495,7 +495,7 @@ struct MessageBubble: View {
 
             if showTransientTools {
                 ForEach(hidden, id: \.id) { toolCall in
-                    ToolResultView(toolCall: toolCall, isMessageStreaming: false)
+                    PlainActivityRow(item: .toolCall(toolCall))
                 }
             }
         }

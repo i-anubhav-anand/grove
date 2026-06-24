@@ -410,7 +410,7 @@ struct StreamingMessageView: View {
 // MARK: - Activity Item
 
 /// A single item in the activity summary list — either a tool call or a thinking block.
-fileprivate enum ActivityItem: Identifiable {
+enum ActivityItem: Identifiable {
     case toolCall(ToolCall)
     case thinking(id: String, text: String, duration: TimeInterval?)
 
@@ -422,7 +422,7 @@ fileprivate enum ActivityItem: Identifiable {
     }
 }
 
-fileprivate func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
+func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
     messages.flatMap { msg in
         msg.blocks.compactMap { block -> ActivityItem? in
             if let tc = block.toolCall { return .toolCall(tc) }
@@ -438,7 +438,7 @@ fileprivate func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
 
 /// Card-free row for the activity summary list. The row is plain text with a
 /// hover highlight; clicking expands an inline scrollable content card.
-fileprivate struct PlainActivityRow: View {
+struct PlainActivityRow: View {
     let item: ActivityItem
     @State private var isExpanded = false
     @State private var isHovered = false
