@@ -25,8 +25,12 @@ struct WorkspaceListView: View {
                         Section {
                             ForEach(appState.workspaces(for: project.id)) { ws in
                                 workspaceRow(ws, project: project)
-                                ForEach(sessions(workspaceId: ws.id, projectId: project.id)) { s in
-                                    sessionRow(s, indented: true)
+                                // Sessions only expand under the selected workspace —
+                                // keeps the list flat and uncluttered otherwise.
+                                if windowState.selectedWorkspace?.id == ws.id {
+                                    ForEach(sessions(workspaceId: ws.id, projectId: project.id)) { s in
+                                        sessionRow(s, indented: true)
+                                    }
                                 }
                             }
                             ForEach(floatingSessions(projectId: project.id)) { s in
@@ -138,24 +142,14 @@ struct WorkspaceListView: View {
 
     private func workspaceRow(_ ws: Workspace, project: Project) -> some View {
         let isSelected = windowState.selectedWorkspace?.id == ws.id
-        return HStack(spacing: 6) {
-            Circle()
-                .fill(statusColor(ws.status))
-                .frame(width: 7, height: 7)
-                .help(ws.status.label)
+        return HStack(spacing: 8) {
             Image(systemName: "arrow.triangle.branch")
-                .font(.system(size: ClaudeTheme.size(10)))
+                .font(.system(size: ClaudeTheme.size(11)))
                 .foregroundStyle(branchColor(ws))
                 .help(prStateHelp(ws))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(ws.displayName)
-                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                    .lineLimit(1)
-                Text(URL(fileURLWithPath: ws.worktreePath).lastPathComponent)
-                    .font(.system(size: ClaudeTheme.size(10)))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
+            Text(ws.displayName)
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                .lineLimit(1)
             Spacer()
             if let d = appState.workspaceDiffStats[ws.id], !d.isEmpty {
                 HStack(spacing: 3) {
