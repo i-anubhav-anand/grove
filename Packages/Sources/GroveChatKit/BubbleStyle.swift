@@ -35,6 +35,9 @@ struct BubbleStyle: ViewModifier {
         switch variant {
         case .tool, .toolError:
             return Self.toolPadding
+        case .assistant:
+            // Assistant text flows directly (no box) — only a little vertical room.
+            return EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0)
         default:
             return Self.contentPadding
         }
@@ -43,7 +46,7 @@ struct BubbleStyle: ViewModifier {
     private var background: some ShapeStyle {
         switch variant {
         case .user:       AnyShapeStyle(ClaudeTheme.userBubble)
-        case .assistant:  AnyShapeStyle(ClaudeTheme.assistantBubble)
+        case .assistant:  AnyShapeStyle(Color.clear)
         case .error:      AnyShapeStyle(ClaudeTheme.statusError.opacity(0.08))
         case .tool:       AnyShapeStyle(ClaudeTheme.surfacePrimary)
         case .toolError:  AnyShapeStyle(ClaudeTheme.statusError.opacity(0.06))
@@ -53,7 +56,7 @@ struct BubbleStyle: ViewModifier {
     @ViewBuilder
     private var border: some View {
         switch variant {
-        case .user:
+        case .user, .assistant:
             EmptyView()
         case .error:
             shape.strokeBorder(ClaudeTheme.statusError.opacity(0.3), lineWidth: Self.borderWidth)
