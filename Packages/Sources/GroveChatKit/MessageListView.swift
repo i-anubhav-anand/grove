@@ -253,7 +253,8 @@ fileprivate func groupSettledTurns(_ messages: [ChatMessage]) -> [MessageGroup] 
     func isCollapsibleIntermediate(_ m: ChatMessage) -> Bool {
         guard m.role == .assistant, !m.isError, !m.isCompactBoundary, !m.isStreaming else { return false }
         guard !finalAnswers.contains(m.id) else { return false }
-        return messageHasVisibleText(m) || !m.blocks.compactMap(\.toolCall).isEmpty
+        let hasThinking = m.blocks.contains { $0.isThinking }
+        return messageHasVisibleText(m) || !m.blocks.compactMap(\.toolCall).isEmpty || hasThinking
     }
 
     func flush() {
