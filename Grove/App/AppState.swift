@@ -83,6 +83,9 @@ final class AppState {
     /// Workspaces (git worktrees) across all projects. See AppState+Workspaces.
     var workspaces: [Workspace] = []
 
+    /// Cached changed-file count per workspace id (refreshed on launch/activate).
+    var workspaceChangeCounts: [UUID: Int] = [:]
+
     // MARK: - Per-Session State (shared — managed independently by session ID regardless of window)
 
     /// Independent state for all active sessions. Key: sessionId
@@ -404,6 +407,7 @@ final class AppState {
                           let cwd = projectLookup[summary.projectId] else { continue }
                     self.reloadCommittedFromDisk(sessionId: sid, projectId: summary.projectId, cwd: cwd)
                 }
+                await self.refreshWorkspaceStatuses()
             }
         }
     }
@@ -522,6 +526,7 @@ final class AppState {
         }
 
         workspaces = await loadAndReconcileWorkspaces()
+        await refreshWorkspaceStatuses()
 
         if let cachedUser = await persistence.loadGitHubUser() {
             gitHubUser = cachedUser

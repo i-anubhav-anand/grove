@@ -23,6 +23,7 @@ extension AppState {
         let workspace = Workspace(projectId: projectId, branch: branch, worktreePath: path)
         workspaces.append(workspace)
         try? await persistence.saveWorkspaces(workspaces)
+        workspaceChangeCounts[workspace.id] = await WorkspaceStatus.changedFileCount(atPath: path)
         return workspace
     }
 
@@ -34,6 +35,7 @@ extension AppState {
             )
         }
         workspaces.removeAll { $0.id == workspace.id }
+        workspaceChangeCounts[workspace.id] = nil
         try? await persistence.saveWorkspaces(workspaces)
     }
 
@@ -43,6 +45,16 @@ extension AppState {
         if let project = projects.first(where: { $0.id == workspace.projectId }) {
             window.selectedProject = project
         }
+    }
+
+    /// Recompute changed-file counts for every workspace (event-driven: called on
+    /// launch, on app-activate, and after create/delete — not polled).
+    func refreshWorkspaceStatuses() async {
+        var counts: [UUID: Int] = [:]
+        for ws in workspaces {
+            counts[ws.id] = await WorkspaceStatus.changedFileCount(atPath: ws.worktreePath)
+        }
+        workspaceChangeCounts = counts
     }
 
     /// Load persisted workspaces and drop any whose worktree directory is gone

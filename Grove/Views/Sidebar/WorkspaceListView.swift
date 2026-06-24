@@ -103,7 +103,15 @@ struct WorkspaceListView: View {
                     .lineLimit(1)
             }
             Spacer()
-            // Status slot — issue #4 fills this with running/changes badges.
+            if let n = appState.workspaceChangeCounts[ws.id], n > 0 {
+                Text("\(n)")
+                    .font(.system(size: ClaudeTheme.size(9), weight: .bold))
+                    .foregroundStyle(ClaudeTheme.textOnAccent)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(ClaudeTheme.accent, in: Capsule())
+                    .help("\(n) changed file\(n == 1 ? "" : "s")")
+            }
             if workspaceIsStreaming(ws) {
                 ProgressView().controlSize(.mini)
             }
