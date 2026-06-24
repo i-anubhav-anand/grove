@@ -230,6 +230,8 @@ struct MainView: View {
                 VStack(spacing: 0) {
                     chatToolbarArea
                     ClaudeThemeDivider()
+                    WorkspaceChatTabs()
+                    ClaudeThemeDivider()
                     ChatView {
                         ChatToolbarControls(placement: .composer)
                     }
