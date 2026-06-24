@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import UniformTypeIdentifiers
 import GroveCore
 import GroveChatKit
@@ -87,26 +88,30 @@ struct MainView: View {
                 .toolbar {
                     if columnVisibility != .detailOnly {
                         ToolbarItemGroup(placement: .confirmationAction) {
-                            Button {
-                                showGitHubSheet = true
-                            } label: {
-                                Image("GitHubMark")
-                                    .resizable()
-                                    .frame(width: 18, height: 18)
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
-                            }
-                            .buttonStyle(.plain)
-                            .help(appState.isLoggedIn ? "Manage GitHub Repos" : "Connect GitHub")
-
-                            Button {
-                                showFilePicker = true
+                            Menu {
+                                Button {
+                                    showFilePicker = true
+                                } label: {
+                                    Label("Open project", systemImage: "folder")
+                                }
+                                Button {
+                                    showGitHubSheet = true
+                                } label: {
+                                    Label("Open GitHub project", systemImage: "globe")
+                                }
+                                Divider()
+                                Button {
+                                    quickStart()
+                                } label: {
+                                    Label("Quick start", systemImage: "plus.square.on.square")
+                                }
                             } label: {
                                 Image(systemName: "plus")
                                     .font(.system(size: ClaudeTheme.size(16)))
                                     .foregroundStyle(ClaudeTheme.textSecondary)
                             }
-                            .buttonStyle(.plain)
-                            .help("Add Project")
+                            .menuIndicator(.hidden)
+                            .help("New project")
                             .fileImporter(
                                 isPresented: $showFilePicker,
                                 allowedContentTypes: [.folder],
@@ -115,7 +120,6 @@ struct MainView: View {
                                 handleFolderSelection(result)
                             }
                         }
-                    
                     }
                 }
 
@@ -289,6 +293,41 @@ struct MainView: View {
     private func handleFolderSelection(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let url = urls.first else { return }
         Task { await appState.addProjectFromFolder(url, in: windowState) }
+    }
+
+    /// Quick start: pick a location + name, create the folder, `git init` it, and
+    /// add it as a project — a fresh local repo ready for an agent.
+    private func quickStart() {
+        let panel = NSSavePanel()
+        panel.title = "Quick start — new project"
+        panel.prompt = "Create"
+        panel.nameFieldLabel = "Project name:"
+        panel.nameFieldStringValue = "new-project"
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            do {
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                await Self.gitInit(at: url)
+                await appState.addProjectFromFolder(url, in: windowState)
+            } catch {
+                windowState.errorMessage = "Couldn't create project: \(error.localizedDescription)"
+                windowState.showError = true
+            }
+        }
+    }
+
+    private static func gitInit(at url: URL) async {
+        await Task.detached {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            proc.arguments = ["init"]
+            proc.currentDirectoryURL = url
+            proc.standardOutput = FileHandle.nullDevice
+            proc.standardError = FileHandle.nullDevice
+            try? proc.run()
+            proc.waitUntilExit()
+        }.value
     }
 }
 
