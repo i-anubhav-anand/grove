@@ -72,16 +72,6 @@ struct MessageListView: View {
                     }
                 }
 
-                if chatBridge.isStreaming {
-                    HStack(alignment: .top, spacing: 0) {
-                        StreamingIndicatorView(
-                            isThinking: chatBridge.isThinking,
-                            startDate: chatBridge.streamingStartDate
-                        )
-                        Spacer(minLength: 40)
-                    }
-                }
-
                 if !chatBridge.isStreaming && !settledItems.isEmpty {
                     WebPreviewButton(messages: settledItems)
                         .id("web-preview")
@@ -205,72 +195,17 @@ fileprivate func partitionByStreaming(_ messages: [ChatMessage]) -> (settled: [C
     return (settled, streaming)
 }
 
-
 fileprivate struct MessageGroup: Identifiable {
     let id: UUID
     let messages: [ChatMessage]
     let isTransientGroup: Bool
 }
 
-/// Returns true if the message would render only a transient tool summary (no visible text or non-transient tools).
-fileprivate func isPureTransientMessage(_ message: ChatMessage) -> Bool {
-    guard message.role == .assistant, !message.isError, !message.isCompactBoundary else { return false }
-    // Whitespace-only text is treated as invisible so it doesn't break transient grouping.
-    let hasVisibleText = message.blocks.contains {
-        guard let text = $0.text else { return false }
-        return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    if hasVisibleText { return false }
-    let toolCalls = message.blocks.compactMap(\.toolCall)
-    guard !toolCalls.isEmpty else { return false }
-    let hasNonTransient = toolCalls.contains { !ToolCategory(toolName: $0.name).isTransient }
-    if hasNonTransient { return false }
-    return true
-}
-
 /// Returns true if the message has no renderable content — all tool calls were removed
 /// (e.g. empty bash output stripped by setToolResult) and there is no text.
-/// These messages are invisible in the UI and should not break transient-tool grouping.
 fileprivate func isInvisibleMessage(_ message: ChatMessage) -> Bool {
     guard message.role == .assistant, !message.isError, !message.isCompactBoundary, !message.isStreaming else { return false }
     return message.blocks.isEmpty
-}
-
-/// Groups consecutive pure-transient assistant messages into combined groups.
-/// - Parameter minGroupSize: Minimum number of transient messages required to collapse into a group.
-///   Pass 1 (streaming context) to hide even a single completed tool call the moment the next message starts.
-///   Pass 2 (settled list) to keep lone tool calls visible after streaming ends.
-fileprivate func groupMessages(_ messages: [ChatMessage], minGroupSize: Int = 2) -> [MessageGroup] {
-    var result: [MessageGroup] = []
-    var accumulator: [ChatMessage] = []
-
-    func flushAccumulator() {
-        guard !accumulator.isEmpty else { return }
-        if accumulator.count >= minGroupSize {
-            result.append(MessageGroup(id: accumulator[0].id, messages: accumulator, isTransientGroup: true))
-        } else {
-            for m in accumulator {
-                result.append(MessageGroup(id: m.id, messages: [m], isTransientGroup: false))
-            }
-        }
-        accumulator = []
-    }
-
-    for message in messages {
-        if isPureTransientMessage(message) {
-            accumulator.append(message)
-        } else if isInvisibleMessage(message) {
-            // Skip invisible messages (e.g. all tool calls removed due to empty results).
-            // They render nothing in the UI and must not break consecutive transient grouping.
-            continue
-        } else {
-            flushAccumulator()
-            result.append(MessageGroup(id: message.id, messages: [message], isTransientGroup: false))
-        }
-    }
-    flushAccumulator()
-
-    return result
 }
 
 // MARK: - Turn-Aware Settled Grouping
@@ -367,25 +302,9 @@ struct StreamingMessageView: View {
         Group {
             if !activeMessages.isEmpty {
 
-                if !streamingActive.isEmpty {
-                    // Collapse completed transient tool calls (even a single one) the moment
-                    // the next streaming message begins, so only the current message stays visible.
-                    let groups = groupMessages(settledActive, minGroupSize: 1)
-                    ForEach(groups) { group in
-                        if group.isTransientGroup {
-                            TransientGroupSummaryView(messages: group.messages)
-                                .id(group.id)
-                        } else if let message = group.messages.first {
-                            MessageBubble(message: message)
-                                .id(message.id)
-                        }
-                    }
-                } else {
-                    // Nothing streaming yet — show each settled message individually.
-                    ForEach(settledActive, id: \.id) { message in
-                        MessageBubble(message: message)
-                            .id(message.id)
-                    }
+                ForEach(settledActive, id: \.id) { message in
+                    MessageBubble(message: message)
+                        .id(message.id)
                 }
 
                 ForEach(streamingActive, id: \.id) { message in
@@ -674,50 +593,6 @@ struct PlainActivityRow: View {
     }
 }
 
-// MARK: - Transient Group Summary
-
-struct TransientGroupSummaryView: View {
-    let messages: [ChatMessage]
-    @State private var isExpanded = false
-
-    private var toolCallCount: Int {
-        messages.reduce(0) { $0 + $1.blocks.compactMap(\.toolCall).count }
-    }
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "eye.slash")
-                            .font(.system(size: ClaudeTheme.size(11)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        Text(String(format: String(localized: "%lld tools executed", bundle: .module), toolCallCount))
-                            .font(.system(size: ClaudeTheme.size(12)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.system(size: ClaudeTheme.size(9)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if isExpanded {
-                    let items = activityItems(from: messages)
-                    ForEach(items) { item in
-                        PlainActivityRow(item: item)
-                    }
-                }
-            }
-            Spacer(minLength: 40)
-        }
-    }
-}
-
 // MARK: - Turn Activity Summary (settled turns — collapsed by default)
 
 /// Collapses a completed turn's intermediate activity into a single header
@@ -785,56 +660,3 @@ struct EmptySessionView: View {
     }
 }
 
-// MARK: - Streaming Indicator
-
-struct StreamingIndicatorView: View {
-    let isThinking: Bool
-    var startDate: Date?
-
-    var body: some View {
-        HStack(spacing: 8) {
-            PulseRingView()
-                .id("pulse")
-
-            Group {
-                if isThinking {
-                    Text("Thinking...", bundle: .module)
-                } else {
-                    Text("Generating response...", bundle: .module)
-                }
-            }
-            .font(.system(size: ClaudeTheme.size(13)))
-            .foregroundStyle(ClaudeTheme.textSecondary)
-
-            Spacer()
-
-            if let startDate {
-                ElapsedTimeView(startDate: startDate)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusMedium))
-    }
-}
-
-// MARK: - Elapsed Time
-
-struct ElapsedTimeView: View {
-    let startDate: Date
-    @State private var elapsed: TimeInterval = 0
-    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        Text(elapsed.formattedDuration)
-            .font(.system(size: ClaudeTheme.size(12), design: .monospaced))
-            .foregroundStyle(ClaudeTheme.textTertiary)
-            .onAppear {
-                elapsed = Date().timeIntervalSince(startDate)
-            }
-            .onReceive(timer) { _ in
-                elapsed = Date().timeIntervalSince(startDate)
-            }
-    }
-}

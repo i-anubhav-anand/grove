@@ -74,7 +74,7 @@ struct MessageBubble: View {
                     // collapsible summary; the final answer text renders directly.
                     let split = Self.splitProcessAndAnswer(visibleBlocks)
                     let toolCount = split.process.filter { $0.toolCall != nil }.count
-                    let shouldFold = !message.isStreaming && (toolCount >= 1 || split.process.count >= 2)
+                    let shouldFold = !message.isStreaming && !split.answer.isEmpty && (toolCount >= 1 || split.process.count >= 2)
 
                     if shouldFold {
                         processFold(processBlocks: split.process, toolCount: toolCount, hasHiddenTools: !hidden.isEmpty)
