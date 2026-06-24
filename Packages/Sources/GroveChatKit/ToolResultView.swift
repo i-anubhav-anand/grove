@@ -48,95 +48,58 @@ struct ToolResultView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Header + Input summary (both clickable)
+        VStack(alignment: .leading, spacing: 4) {
+            // Compact one-line row: icon · action+target · status · chevron.
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                 }
             } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Image(systemName: sfSymbol)
-                            .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                            .foregroundStyle(iconColor)
-                            .frame(width: 16, height: 16)
+                HStack(spacing: 7) {
+                    Image(systemName: sfSymbol)
+                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .foregroundStyle(iconColor)
+                        .frame(width: 15, height: 15)
 
-                        if toolNameLower == "agent" {
-                            Text(agentDisplayTitle)
-                                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                        } else if let skillName = skillName {
-                            Text(skillName)
-                                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                        } else {
-                            Text(toolCall.name)
-                                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                        }
+                    headerLabel
+                        .lineLimit(1)
 
-                        Spacer()
+                    Spacer(minLength: 6)
 
-                        if toolCall.isError {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusError)
-                                .font(.caption)
-                                .accessibilityLabel("Error occurred")
-                        } else if toolCall.result != nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusSuccess)
-                                .font(.caption)
-                                .accessibilityLabel("Completed")
-                        } else if isMessageStreaming {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .accessibilityLabel("Running")
-                        } else {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                                .font(.caption)
-                                .accessibilityLabel("Interrupted")
-                        }
+                    statusIndicator
 
-                        if toolCall.result != nil || hasExpandableContent {
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.caption2)
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                        }
+                    if toolCall.result != nil || hasExpandableContent {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                     }
-
-                    inputSummaryView
-                        .lineLimit(isExpanded ? nil : 1)
                 }
+                .padding(.vertical, 2)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            // Expanded detail
+            // Expanded detail — each detail kind carries its own subtle background.
             if isExpanded {
                 if isEditTool, let oldStr = toolCall.input["old_string"]?.stringValue,
                    let newStr = toolCall.input["new_string"]?.stringValue {
-                    ClaudeThemeDivider()
                     editDiffView(oldString: oldStr, newString: newStr)
                 } else if isBashTool, bashCommand != nil {
-                    ClaudeThemeDivider()
                     bashTerminalView
                 } else if let result = toolCall.result, !result.isEmpty {
-                    ClaudeThemeDivider()
-
                     ScrollView {
                         Text(result)
                             .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textPrimary)
+                            .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .frame(maxHeight: 200)
+                    .padding(8)
+                    .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
         }
-        .bubbleStyle(toolCall.isError ? .toolError : .tool)
         .onChange(of: toolCall.result) { _, newResult in
             guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
             isExpanded = false
@@ -312,6 +275,42 @@ struct ToolResultView: View {
         }
         .buttonStyle(.plain)
         .pointerCursorOnHover()
+    }
+
+    /// The single compact label: a clickable file summary for edits/writes, else
+    /// a concise "action — target" string (agent title, skill, or input summary).
+    @ViewBuilder
+    private var headerLabel: some View {
+        if (isEditTool || toolNameLower == "write"),
+           toolCall.input["file_path"]?.stringValue != nil {
+            inputSummaryView
+        } else {
+            Text(primaryLabel)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+        }
+    }
+
+    private var primaryLabel: String {
+        if toolNameLower == "agent" { return agentDisplayTitle }
+        if let skillName { return "Skill — \(skillName)" }
+        return inputSummary
+    }
+
+    /// Subtle trailing status: error or a running spinner. Completed tools show
+    /// nothing (the row itself is the record) to keep the transcript clean.
+    @ViewBuilder
+    private var statusIndicator: some View {
+        if toolCall.isError {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(ClaudeTheme.statusError)
+                .accessibilityLabel("Error occurred")
+        } else if toolCall.result == nil && isMessageStreaming {
+            ProgressView()
+                .controlSize(.mini)
+                .accessibilityLabel("Running")
+        }
     }
 
     @ViewBuilder
