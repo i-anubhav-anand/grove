@@ -2149,10 +2149,18 @@ final class AppState {
             }
         }
 
+        // Restore the session's workspace binding so resume/reload use the same
+        // worktree cwd the session was created in. Without this, switching to (or
+        // sending in) a workspace-bound session runs from the project root and
+        // `claude --resume` fails with "No conversation found with session ID".
+        let boundWorkspace = session.workspaceId.flatMap { wid in workspaces.first { $0.id == wid } }
+        window.selectedWorkspace = boundWorkspace
+
         // Always reload from disk — disk is the source of truth.
         // reloadCommittedFromDisk is a no-op when the session is actively streaming.
         if let project = window.selectedProject {
-            reloadCommittedFromDisk(sessionId: session.id, projectId: project.id, cwd: project.path)
+            let cwd = boundWorkspace?.worktreePath ?? project.path
+            reloadCommittedFromDisk(sessionId: session.id, projectId: project.id, cwd: cwd)
         }
 
         if sessionStates[session.id]?.isStreaming == true {
