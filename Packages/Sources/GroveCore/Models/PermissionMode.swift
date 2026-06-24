@@ -37,4 +37,14 @@ public enum PermissionMode: String, CaseIterable, Sendable, Codable {
         self == .bypassPermissions
     }
 
+    /// The value to pass to the CLI's `--permission-mode`, or nil when this isn't
+    /// a real CLI mode. `default` needs no flag, and `auto` is Grove-only — it's
+    /// implemented by auto-approving hook requests, so it must NOT be sent to the
+    /// CLI (`--permission-mode auto` is invalid and silently falls back to asking).
+    public var cliPermissionMode: String? {
+        switch self {
+        case .default, .auto: return nil
+        case .acceptEdits, .plan, .bypassPermissions: return rawValue
+        }
+    }
 }
