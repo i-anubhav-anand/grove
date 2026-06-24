@@ -131,37 +131,11 @@ extension AppState {
 
     // MARK: - Dispatch from a prompt
 
-    /// Git branch name derived from a free-form prompt, e.g. "Add dark mode toggle"
-    /// → `add-dark-mode-toggle`. Empty/punctuation-only prompts fall back to
-    /// `workspace`.
-    func branchName(forPrompt prompt: String) -> String {
-        var slug = ""
-        var lastDash = false
-        for ch in prompt.lowercased() {
-            if ch.isASCII && (ch.isLetter || ch.isNumber) {
-                slug.append(ch)
-                lastDash = false
-            } else if !lastDash {
-                slug.append("-")
-                lastDash = true
-            }
-        }
-        let dashes = CharacterSet(charactersIn: "-")
-        slug = slug.trimmingCharacters(in: dashes)
-        if slug.count > 40 {
-            slug = String(slug.prefix(40)).trimmingCharacters(in: dashes)
-        }
-        return slug.isEmpty ? "workspace" : slug
-    }
-
-    /// Disambiguate a branch name against the project's existing workspaces by
-    /// appending `-2`, `-3`, … so two similar prompts don't collide.
-    func uniqueBranch(_ base: String, projectId: UUID) -> String {
-        let existing = Set(workspaces.filter { $0.projectId == projectId }.map(\.branch))
-        guard existing.contains(base) else { return base }
-        var i = 2
-        while existing.contains("\(base)-\(i)") { i += 1 }
-        return "\(base)-\(i)"
+    /// A place-name branch for a new worktree (e.g. `missoula`), unique within the
+    /// project — decoupled from the prompt text, like Conductor.
+    func placeBranchName(projectId: UUID) -> String {
+        let used = Set(workspaces.filter { $0.projectId == projectId }.map(\.branch))
+        return PlaceNames.random(excluding: used)
     }
 
     /// Create a workspace from a free-form prompt: branch off the repo's remote
@@ -175,7 +149,7 @@ extension AppState {
         in window: WindowState
     ) async throws -> Workspace {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        let branch = uniqueBranch(branchName(forPrompt: trimmed), projectId: projectId)
+        let branch = placeBranchName(projectId: projectId)
         startNewChat(in: window)
         let workspace = try await createWorkspace(projectId: projectId, branch: branch)
         selectWorkspace(workspace, in: window)

@@ -975,7 +975,7 @@ final class AppState {
         // worktree so it never operates on the project's base checkout. Explicit
         // flows (dispatch) set selectedWorkspace beforehand and are left as-is.
         if window.currentSessionId == nil, window.selectedWorkspace == nil {
-            await ensureSessionWorktree(prompt: displayText ?? prompt, project: project, in: window)
+            await ensureSessionWorktree(project: project, in: window)
         }
 
         let streamId = UUID()
