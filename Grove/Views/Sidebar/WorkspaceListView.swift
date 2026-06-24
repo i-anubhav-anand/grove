@@ -104,6 +104,26 @@ struct WorkspaceListView: View {
         .padding(.leading, 4)
     }
 
+    /// Branch-icon color mirroring GitHub's PR state: green open, purple merged,
+    /// red closed, neutral when the branch has no PR (or we're signed out).
+    private func branchColor(_ ws: Workspace) -> Color {
+        switch appState.workspacePRStates[ws.id] {
+        case .open:   return ClaudeTheme.statusSuccess
+        case .merged: return Color(red: 0.54, green: 0.34, blue: 0.90) // GitHub merged purple
+        case .closed: return ClaudeTheme.statusError
+        case nil:     return ClaudeTheme.textSecondary
+        }
+    }
+
+    private func prStateHelp(_ ws: Workspace) -> String {
+        switch appState.workspacePRStates[ws.id] {
+        case .open:   return "PR open"
+        case .merged: return "PR merged"
+        case .closed: return "PR closed"
+        case nil:     return ws.branch
+        }
+    }
+
     /// Dot color per board status.
     private func statusColor(_ status: WorkspaceStatus) -> Color {
         switch status {
@@ -125,7 +145,8 @@ struct WorkspaceListView: View {
                 .help(ws.status.label)
             Image(systemName: "arrow.triangle.branch")
                 .font(.system(size: ClaudeTheme.size(10)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
+                .foregroundStyle(branchColor(ws))
+                .help(prStateHelp(ws))
             VStack(alignment: .leading, spacing: 1) {
                 Text(ws.displayName)
                     .font(.system(size: ClaudeTheme.size(12), weight: .medium))

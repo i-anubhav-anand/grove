@@ -89,6 +89,11 @@ final class AppState {
     /// Cached +/- line stats per workspace id.
     var workspaceDiffStats: [UUID: DiffStat] = [:]
 
+    /// Cached GitHub PR state per workspace id (open/merged/closed), used to color
+    /// the sidebar branch icon. Only populated when signed in and the project is
+    /// linked to a GitHub repo.
+    var workspacePRStates: [UUID: BranchPRState] = [:]
+
     /// Persisted sessionId -> workspaceId binding (the CLI sidecar doesn't carry it).
     var sessionWorkspaceBindings: [String: UUID] = [:] {
         didSet {
