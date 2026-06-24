@@ -117,9 +117,9 @@ extension AppState {
         autoSend: Bool,
         in window: WindowState
     ) async throws -> Workspace {
+        startNewChat(in: window)
         let workspace = try await createWorkspace(projectId: projectId, branch: branchName(for: issue))
         selectWorkspace(workspace, in: window)
-        startNewChat(in: window)
         window.inputText = seedPrompt(for: issue)
         if autoSend {
             await send(in: window)
@@ -156,7 +156,7 @@ extension AppState {
 
     /// Disambiguate a branch name against the project's existing workspaces by
     /// appending `-2`, `-3`, … so two similar prompts don't collide.
-    private func uniqueBranch(_ base: String, projectId: UUID) -> String {
+    func uniqueBranch(_ base: String, projectId: UUID) -> String {
         let existing = Set(workspaces.filter { $0.projectId == projectId }.map(\.branch))
         guard existing.contains(base) else { return base }
         var i = 2
@@ -176,9 +176,9 @@ extension AppState {
     ) async throws -> Workspace {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let branch = uniqueBranch(branchName(forPrompt: trimmed), projectId: projectId)
+        startNewChat(in: window)
         let workspace = try await createWorkspace(projectId: projectId, branch: branch)
         selectWorkspace(workspace, in: window)
-        startNewChat(in: window)
         window.inputText = trimmed
         if autoSend {
             await send(in: window)

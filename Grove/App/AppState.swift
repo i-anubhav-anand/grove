@@ -967,6 +967,13 @@ final class AppState {
             await cancelStreaming(in: window)
         }
 
+        // New-chat isolation: a brand-new chat with no workspace gets its own
+        // worktree so it never operates on the project's base checkout. Explicit
+        // flows (dispatch) set selectedWorkspace beforehand and are left as-is.
+        if window.currentSessionId == nil, window.selectedWorkspace == nil {
+            await ensureSessionWorktree(prompt: displayText ?? prompt, project: project, in: window)
+        }
+
         let streamId = UUID()
         let isNewSession = window.currentSessionId == nil
         let isPending = window.currentSessionId.map { window.pendingPlaceholderIds.contains($0) } ?? false
@@ -2276,6 +2283,9 @@ final class AppState {
         saveDraft(in: window)
         saveQueue(in: window)
         releaseOutgoingSession(window.currentSessionId, in: window)
+        // Detach from the previous session's worktree so the next chat gets its own
+        // (created on first send by ensureSessionWorktree).
+        window.selectedWorkspace = nil
         window.currentSessionId = nil
         window.sessionModel = nil
         window.sessionEffort = nil
