@@ -4,6 +4,7 @@ import GroveCore
 
 struct MessageBubble: View {
     @Environment(ChatBridge.self) private var chatBridge
+    @Environment(WindowState.self) private var windowState
     let message: ChatMessage
     @State private var isCopied = false
     @State private var cursorVisible = true
@@ -99,6 +100,17 @@ struct MessageBubble: View {
                         Text(duration.formattedDuration)
                             .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
                             .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
+                }
+
+                // Files changed this turn — pills with diff stats, always visible
+                // even when the process is folded. Click to open the diff.
+                if message.role == .assistant && !message.isStreaming {
+                    let edits = fileEdits
+                    if !edits.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(edits) { fileEditPill($0) }
+                        }
                     }
                 }
             }
@@ -543,6 +555,149 @@ struct MessageBubble: View {
             markdown: autoLinked,
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(text)
+    }
+
+    // MARK: - File Edit Pills
+
+    /// A file touched by this turn's Edit/Write/MultiEdit tool calls, with rough
+    /// added/removed line counts and the hunks needed to open its diff.
+    private struct FileEdit: Identifiable {
+        let path: String
+        var added: Int
+        var removed: Int
+        var hunks: [PreviewFile.EditHunk]
+        var id: String { path }
+        var name: String { URL(fileURLWithPath: path).lastPathComponent }
+    }
+
+    private func lineCount(_ s: String) -> Int {
+        s.isEmpty ? 0 : s.components(separatedBy: "\n").count
+    }
+
+    /// Aggregate every file-modifying tool call in the message by file path.
+    private var fileEdits: [FileEdit] {
+        var map: [String: FileEdit] = [:]
+        var order: [String] = []
+        for block in message.blocks {
+            guard let tc = block.toolCall,
+                  let path = tc.input["file_path"]?.stringValue else { continue }
+            var added = 0, removed = 0
+            var hunks: [PreviewFile.EditHunk] = []
+            switch tc.name.lowercased() {
+            case "write":
+                let content = tc.input["content"]?.stringValue ?? ""
+                added = lineCount(content)
+                hunks = [PreviewFile.EditHunk(oldString: "", newString: content)]
+            case "edit":
+                let old = tc.input["old_string"]?.stringValue ?? ""
+                let new = tc.input["new_string"]?.stringValue ?? ""
+                removed = lineCount(old); added = lineCount(new)
+                hunks = [PreviewFile.EditHunk(oldString: old, newString: new)]
+            case "multiedit", "multi_edit":
+                for entry in tc.input["edits"]?.arrayValue ?? [] {
+                    guard let obj = entry.objectValue else { continue }
+                    let old = obj["old_string"]?.stringValue ?? ""
+                    let new = obj["new_string"]?.stringValue ?? ""
+                    removed += lineCount(old); added += lineCount(new)
+                    hunks.append(PreviewFile.EditHunk(oldString: old, newString: new))
+                }
+            default:
+                continue
+            }
+            if var existing = map[path] {
+                existing.added += added
+                existing.removed += removed
+                existing.hunks.append(contentsOf: hunks)
+                map[path] = existing
+            } else {
+                map[path] = FileEdit(path: path, added: added, removed: removed, hunks: hunks)
+                order.append(path)
+            }
+        }
+        return order.compactMap { map[$0] }
+    }
+
+    private func fileIcon(for name: String) -> String {
+        switch (name as NSString).pathExtension.lowercased() {
+        case "swift":                       return "swift"
+        case "md", "markdown", "txt", "rtf": return "doc.text"
+        case "json", "yml", "yaml", "toml", "plist": return "curlybraces"
+        case "sh", "bash", "zsh", "fish":   return "terminal"
+        case "png", "jpg", "jpeg", "gif", "svg", "pdf": return "photo"
+        default:                            return "doc"
+        }
+    }
+
+    private func fileEditPill(_ edit: FileEdit) -> some View {
+        Button {
+            windowState.diffFile = PreviewFile(path: edit.path, name: edit.name, editHunks: edit.hunks)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: fileIcon(for: edit.name))
+                    .font(.system(size: ClaudeTheme.messageSize(10)))
+                    .foregroundStyle(ClaudeTheme.statusWarning)
+                Text(edit.name)
+                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                if edit.added > 0 {
+                    Text(verbatim: "+\(edit.added)")
+                        .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
+                }
+                if edit.removed > 0 {
+                    Text(verbatim: "-\(edit.removed)")
+                        .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.statusError)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(ClaudeTheme.surfacePrimary, in: Capsule())
+            .overlay(Capsule().strokeBorder(ClaudeTheme.border, lineWidth: 0.5))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .pointerCursorOnHover()
+        .help(edit.path)
+    }
+}
+
+// MARK: - Flow Layout
+
+/// A simple wrapping layout: lays subviews left-to-right, wrapping to the next
+/// row when the proposed width is exceeded. Used for the file-edit pills.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth, x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth.isFinite ? maxWidth : x, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x: CGFloat = bounds.minX, y: CGFloat = bounds.minY, rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
 
