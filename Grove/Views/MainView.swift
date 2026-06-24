@@ -11,7 +11,7 @@ struct MainView: View {
     @Environment(\.openSettings) private var openSettings
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
-    @State private var inspectorStarted = false
+    @State private var inspectorStarted = true
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
@@ -138,24 +138,9 @@ struct MainView: View {
 
     private var sidebarContent: some View {
         VStack(spacing: 0) {
-            if windowState.selectedProject != nil {
-                ClaudeSegmentedControl(selection: $sidebarTab)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-
-                switch sidebarTab {
-                case .files:
-                    FileTreeView(projectPath: windowState.selectedProject!.path, searchTrigger: $fileSearchTrigger)
-                case .history:
-                    WorkspaceListView()
-                }
-            } else {
-                WorkspaceListView()
-            }
-
-            if windowState.selectedProject != nil {
-                SidebarTabShortcuts(sidebarTab: $sidebarTab, fileSearchTrigger: $fileSearchTrigger, columnVisibility: $columnVisibility)
-            }
+            // Left pane is the workspace/session list. The file tree now lives in
+            // the right panel's "Files" tab.
+            WorkspaceListView()
 
             ClaudeThemeDivider()
 
@@ -437,12 +422,13 @@ struct InspectorPanel: View {
     @State private var memoClearID: UUID? = nil
     @State private var terminalFocusID: UUID? = nil
     @State private var memoFocusID: UUID? = nil
+    @State private var fileSearchTrigger = false
 
     private func bumpFocus(for tab: InspectorTab) {
         switch tab {
         case .terminal: terminalFocusID = UUID()
         case .memo: memoFocusID = UUID()
-        case .changes, .checks, .review: break
+        case .files, .changes, .checks, .review: break
         }
     }
 
@@ -488,6 +474,16 @@ struct InspectorPanel: View {
             .padding(.vertical, 10)
 
             ClaudeThemeDivider()
+
+            Group {
+                if let cwd = workspaceCwd {
+                    FileTreeView(projectPath: cwd, searchTrigger: $fileSearchTrigger)
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(maxHeight: windowState.inspectorTab == .files ? .infinity : 0)
+            .clipped()
 
             ChangesPaneView(worktreePath: workspaceCwd)
                 .frame(maxHeight: windowState.inspectorTab == .changes ? .infinity : 0)

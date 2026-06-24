@@ -4,14 +4,16 @@ import SwiftUI
 // MARK: - InspectorTab
 
 public enum InspectorTab: String, CaseIterable {
+    case files = "Files"
     case changes = "Changes"
-    case terminal = "Terminal"
     case checks = "Checks"
+    case terminal = "Terminal"
     case review = "Review"
     case memo = "Memo"
 
     public var icon: String {
         switch self {
+        case .files: "folder"
         case .changes: "plusminus.circle"
         case .terminal: "apple.terminal"
         case .checks: "checkmark.seal"
@@ -92,8 +94,8 @@ public final class WindowState {
     // MARK: - UI State
 
     public var interactiveTerminal: InteractiveTerminalState?
-    public var showInspector: Bool = false
-    public var inspectorTab: InspectorTab = .changes
+    public var showInspector: Bool = true
+    public var inspectorTab: InspectorTab = .files
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
     public var showMarketplace = false
