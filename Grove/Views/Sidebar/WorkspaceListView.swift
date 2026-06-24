@@ -169,8 +169,10 @@ struct WorkspaceListView: View {
         .onTapGesture { appState.selectWorkspace(ws, in: windowState) }
         .contextMenu {
             Button {
-                appState.selectWorkspace(ws, in: windowState)
+                // startNewChat detaches the workspace; re-select after so this
+                // session stays in `ws` instead of spawning a fresh worktree.
                 appState.startNewChat(in: windowState)
+                appState.selectWorkspace(ws, in: windowState)
             } label: { Label("New session here", systemImage: "square.and.pencil") }
             Divider()
             Menu {
