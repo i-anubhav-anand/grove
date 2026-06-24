@@ -580,9 +580,7 @@ final class AppState {
         allSessionSummaries = await mergedSummariesAcrossProjects()
         injectWorkspaceBindings()
 
-        for project in projects {
-            watchProjectDirectory(project)
-        }
+        startCLIProjectsWatcher()
 
         if claudeInstalled && !onboardingCompleted {
             onboardingCompleted = true
@@ -2137,45 +2135,56 @@ final class AppState {
 
     // MARK: - CLI directory watch
 
-    /// Subscribe to filesystem changes in a project's CLI jsonl directory.
-    /// Idempotent — safe to call repeatedly. Silent no-op if the directory
-    /// hasn't been created yet; `send()` re-attempts after that point.
-    private func watchProjectDirectory(_ project: Project) {
-        let projectId = project.id
-        let cwd = project.path
+    /// Watch the entire ~/.claude/projects/ tree for changes and reload all
+    /// session summaries. FSEventStream is recursive so a single watch here
+    /// covers every worktree subdirectory — the old per-project approach only
+    /// watched the root-cwd CLI dir, which is never written to (every chat runs
+    /// in its own git worktree) and therefore never fired.
+    func startCLIProjectsWatcher() {
+        let root = CLIProjectsDirectory.url
         Task { [weak self] in
             guard let self else { return }
-            // cliStore.directory consults the cwd-index that survives the
-            // lossy slash/dot encoding — required for cwds containing dots.
-            let dir = await self.cliStore.directory(forCwd: cwd)
-            await self.directoryWatcher.watch(url: dir) { [weak self] in
+            await self.directoryWatcher.watch(url: root) { [weak self] in
                 Task { @MainActor [weak self] in
-                    guard let self,
-                          let p = self.projects.first(where: { $0.id == projectId }) else { return }
-                    await self.reloadSessionSummaries(for: p)
-                    self.reloadActiveSessionsForProject(projectId: projectId, cwd: cwd)
+                    guard let self else { return }
+                    await self.reloadAllSessionSummaries()
+                    self.reloadActiveSessionsForAllProjects()
                 }
             }
         }
     }
 
-    private func reloadActiveSessionsForProject(projectId: UUID, cwd: String) {
-        // Only reload sessions actually loaded into memory (a window has touched them).
+    private func reloadAllSessionSummaries() async {
+        let fresh = await mergedSummariesAcrossProjects()
+        if allSessionSummaries.sorted(by: { $0.updatedAt > $1.updatedAt }) == fresh { return }
+        // Merge: keep in-memory sessions that the disk scan missed (e.g. a new
+        // session whose file hasn't been flushed yet) rather than wiping them.
+        let freshIDs = Set(fresh.map { $0.id })
+        let streaming = allSessionSummaries.filter { !freshIDs.contains($0.id) && isStreaming($0.id) }
+        allSessionSummaries = (fresh + streaming).sorted { $0.updatedAt > $1.updatedAt }
+        injectWorkspaceBindings()
+    }
+
+    private func reloadActiveSessionsForAllProjects() {
         for (sid, state) in sessionStates {
             guard !state.isStreaming else { continue }
             guard let summary = allSessionSummaries.first(where: { $0.id == sid }),
-                  summary.projectId == projectId else { continue }
-            reloadCommittedFromDisk(sessionId: sid, projectId: projectId, cwd: cwd)
+                  let project = projects.first(where: { $0.id == summary.projectId }) else { continue }
+            let cwd = summary.workspaceId
+                .flatMap { wid in workspaces.first(where: { $0.id == wid }) }
+                .map { $0.worktreePath } ?? project.path
+            reloadCommittedFromDisk(sessionId: sid, projectId: project.id, cwd: cwd)
         }
     }
 
+    private func watchProjectDirectory(_ project: Project) {
+        // No-op: session watching is now handled by the single top-level
+        // startCLIProjectsWatcher() call in initialize(). Kept to avoid
+        // breaking call sites that add/remove projects.
+    }
+
     private func unwatchProjectDirectory(_ project: Project) {
-        let cwd = project.path
-        Task { [weak self] in
-            guard let self else { return }
-            let dir = await self.cliStore.directory(forCwd: cwd)
-            await self.directoryWatcher.unwatch(url: dir)
-        }
+        // No-op: the top-level CLIProjectsDirectory watcher is permanent.
     }
 
     private func switchToSession(_ session: ChatSession, messages loadedMessages: [ChatMessage]? = nil, in window: WindowState) {
