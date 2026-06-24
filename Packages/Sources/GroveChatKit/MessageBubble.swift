@@ -109,7 +109,13 @@ struct MessageBubble: View {
                     let edits = fileEdits
                     if !edits.isEmpty {
                         FlowLayout(spacing: 6) {
-                            ForEach(edits) { fileEditPill($0) }
+                            ForEach(edits) { edit in
+                                FileEditPill(edit: edit) {
+                                    windowState.diffFile = PreviewFile(
+                                        path: edit.path, name: edit.name, editHunks: edit.hunks
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -559,17 +565,6 @@ struct MessageBubble: View {
 
     // MARK: - File Edit Pills
 
-    /// A file touched by this turn's Edit/Write/MultiEdit tool calls, with rough
-    /// added/removed line counts and the hunks needed to open its diff.
-    private struct FileEdit: Identifiable {
-        let path: String
-        var added: Int
-        var removed: Int
-        var hunks: [PreviewFile.EditHunk]
-        var id: String { path }
-        var name: String { URL(fileURLWithPath: path).lastPathComponent }
-    }
-
     private func lineCount(_ s: String) -> Int {
         s.isEmpty ? 0 : s.components(separatedBy: "\n").count
     }
@@ -617,23 +612,43 @@ struct MessageBubble: View {
         return order.compactMap { map[$0] }
     }
 
-    private func fileIcon(for name: String) -> String {
-        switch (name as NSString).pathExtension.lowercased() {
-        case "swift":                       return "swift"
-        case "md", "markdown", "txt", "rtf": return "doc.text"
+}
+
+// MARK: - File Edit Pill (+ hover diff preview)
+
+/// A file touched by a turn's Edit/Write/MultiEdit tool calls, with rough
+/// added/removed line counts and the hunks needed to render/open its diff.
+struct FileEdit: Identifiable {
+    let path: String
+    var added: Int
+    var removed: Int
+    var hunks: [PreviewFile.EditHunk]
+    var id: String { path }
+    var name: String { URL(fileURLWithPath: path).lastPathComponent }
+}
+
+/// Compact pill: file icon + name + `+adds`/`-removed`. Hover shows a diff
+/// preview popover; click opens the full diff.
+private struct FileEditPill: View {
+    let edit: FileEdit
+    let onOpen: () -> Void
+    @State private var hovering = false
+
+    private var icon: String {
+        switch (edit.name as NSString).pathExtension.lowercased() {
+        case "swift":                                return "swift"
+        case "md", "markdown", "txt", "rtf":         return "doc.text"
         case "json", "yml", "yaml", "toml", "plist": return "curlybraces"
-        case "sh", "bash", "zsh", "fish":   return "terminal"
+        case "sh", "bash", "zsh", "fish":            return "terminal"
         case "png", "jpg", "jpeg", "gif", "svg", "pdf": return "photo"
-        default:                            return "doc"
+        default:                                     return "doc"
         }
     }
 
-    private func fileEditPill(_ edit: FileEdit) -> some View {
-        Button {
-            windowState.diffFile = PreviewFile(path: edit.path, name: edit.name, editHunks: edit.hunks)
-        } label: {
+    var body: some View {
+        Button(action: onOpen) {
             HStack(spacing: 5) {
-                Image(systemName: fileIcon(for: edit.name))
+                Image(systemName: icon)
                     .font(.system(size: ClaudeTheme.messageSize(10)))
                     .foregroundStyle(ClaudeTheme.statusWarning)
                 Text(edit.name)
@@ -658,7 +673,69 @@ struct MessageBubble: View {
         }
         .buttonStyle(.plain)
         .pointerCursorOnHover()
-        .help(edit.path)
+        .onHover { hovering = $0 }
+        .popover(isPresented: $hovering, arrowEdge: .bottom) {
+            EditDiffPreview(edit: edit)
+        }
+    }
+}
+
+/// Hover popover: the file path + a colored diff of the edit hunks.
+private struct EditDiffPreview: View {
+    let edit: FileEdit
+
+    private var lines: [DiffLine] {
+        FileDiffView.buildEditDiffLines(from: edit.hunks)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(edit.path)
+                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium, design: .monospaced))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                Spacer(minLength: 12)
+                if edit.added > 0 {
+                    Text(verbatim: "+\(edit.added)")
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
+                }
+                if edit.removed > 0 {
+                    Text(verbatim: "-\(edit.removed)")
+                        .foregroundStyle(ClaudeTheme.statusError)
+                }
+            }
+            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+
+            ClaudeThemeDivider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(line.text.isEmpty ? " " : line.text)
+                            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+                            .foregroundStyle(line.kind.foregroundColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 0.5)
+                            .background(diffRowBackground(line.kind))
+                    }
+                }
+            }
+            .frame(maxHeight: 320)
+        }
+        .padding(12)
+        .frame(width: 460)
+        .background(ClaudeTheme.codeBackground)
+    }
+
+    private func diffRowBackground(_ kind: DiffLine.Kind) -> Color {
+        switch kind {
+        case .added:   return ClaudeTheme.statusSuccess.opacity(0.08)
+        case .removed: return ClaudeTheme.statusError.opacity(0.08)
+        default:       return .clear
+        }
     }
 }
 

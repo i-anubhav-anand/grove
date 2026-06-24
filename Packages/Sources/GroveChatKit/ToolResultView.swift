@@ -17,10 +17,11 @@ struct ToolResultView: View {
         let lower = toolCall.name.lowercased()
         self.toolNameLower = lower
         let isTransient = ToolCategory(toolName: lower).isTransient
-        // Edit tool is expanded by default; transient tools are expanded only while running (until result arrives)
+        // Edits are represented by the compact file-edit pills (with a hover diff
+        // preview) below the message, so they no longer auto-expand a big inline
+        // diff here. Transient tools expand only while running (until result arrives).
         self._isExpanded = State(initialValue:
-            lower == "edit" || lower == "multiedit"
-            || (isTransient && isMessageStreaming && toolCall.result == nil)
+            isTransient && isMessageStreaming && toolCall.result == nil
         )
     }
 
