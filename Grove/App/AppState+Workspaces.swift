@@ -58,6 +58,23 @@ extension AppState {
         }
         workspaceChangeCounts = counts
         workspaceDiffStats = stats
+        await refreshWorkspacePRStates()
+    }
+
+    /// Fetch each workspace's GitHub PR state (open/merged/closed) so the sidebar
+    /// branch icon can mirror GitHub's colors. No-op when signed out; skips
+    /// workspaces whose project isn't linked to a GitHub repo.
+    func refreshWorkspacePRStates() async {
+        guard await github.accessToken != nil else { return }
+        var states: [UUID: BranchPRState] = [:]
+        for ws in workspaces {
+            guard let project = projects.first(where: { $0.id == ws.projectId }),
+                  let repo = project.gitHubRepo, !repo.isEmpty else { continue }
+            if let state = try? await github.fetchBranchPRState(repoFullName: repo, branch: ws.branch) {
+                states[ws.id] = state
+            }
+        }
+        workspacePRStates = states
     }
 
     /// Load persisted workspaces and drop any whose worktree directory is gone

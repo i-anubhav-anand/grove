@@ -232,6 +232,23 @@ actor GitHubService {
         return prs.first
     }
 
+    /// GitHub PR state for a branch (open / merged / closed), or nil if the branch
+    /// has no PR. Used to color the workspace's branch icon like GitHub does.
+    func fetchBranchPRState(repoFullName: String, branch: String) async throws -> BranchPRState? {
+        let parts = repoFullName.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        let owner = String(parts[0])
+        let repo = String(parts[1])
+        let head = "\(owner):\(branch)"
+        let encodedHead = head.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? head
+        let prs: [PullRequest] = try await apiRequest(
+            path: "/repos/\(owner)/\(repo)/pulls?state=all&head=\(encodedHead)&per_page=20"
+        )
+        guard let pr = prs.first else { return nil }
+        if pr.mergedAt != nil { return .merged }
+        return pr.state == "closed" ? .closed : .open
+    }
+
     /// Fetch the inline (diff) review comments for a pull request.
     func fetchReviewComments(repoFullName: String, pullNumber: Int) async throws -> [PRReviewComment] {
         let parts = repoFullName.split(separator: "/")
@@ -363,13 +380,25 @@ struct PullRequest: Decodable, Sendable, Identifiable {
     let number: Int
     let title: String
     let htmlUrl: String
+    /// "open" or "closed".
+    let state: String
+    /// Non-nil once the PR has been merged.
+    let mergedAt: String?
 
     var id: Int { number }
 
     enum CodingKeys: String, CodingKey {
-        case number, title
+        case number, title, state
         case htmlUrl = "html_url"
+        case mergedAt = "merged_at"
     }
+}
+
+/// GitHub state of the PR for a workspace's branch — drives the sidebar icon color.
+enum BranchPRState: String, Sendable {
+    case open    // PR open
+    case merged  // PR merged
+    case closed  // PR closed without merging
 }
 
 /// An inline review comment on a pull request diff.
