@@ -274,9 +274,28 @@ extension ThemeColors {
     }()
 }
 
+extension ThemeColors {
+    /// Pure-black theme — forced black in any system appearance.
+    public static let black: ThemeColors = ThemeColors(
+        accent: .hex(0xD97757), accentSubtle: .hex(0xD97757, opacity: 0.18),
+        background: .hex(0x000000), surfacePrimary: .hex(0x0C0C0C),
+        surfaceSecondary: .hex(0x141414), surfaceTertiary: .hex(0x1E1E1E),
+        surfaceElevated: .hex(0x080808),
+        sidebarBackground: .hex(0x000000), sidebarItemHover: .hex(0x161616),
+        sidebarItemSelected: .hex(0xD97757, opacity: 0.18),
+        textPrimary: .hex(0xE6E6E6), textSecondary: .hex(0x9A9A9A), textTertiary: .hex(0x6A6A6A),
+        border: .hex(0x242424), borderSubtle: .hex(0x161616),
+        codeBackground: .hex(0x0A0A0A), codeHeaderBackground: .hex(0x141414),
+        userBubble: .hex(0x1C1C1C), userBubbleText: .hex(0xE6E6E6), assistantBubble: .hex(0x0A0A0A),
+        statusSuccess: .hex(0x5FB07E), statusError: .hex(0xC86C5E), statusWarning: .hex(0xD9A757),
+        inputBackground: .hex(0x0E0E0E), inputBorder: .hex(0x262626)
+    )
+}
+
 // MARK: - App Theme Enum
 
 public enum AppTheme: String, CaseIterable, Identifiable {
+    case black    = "Black"
     case claude   = "Terracotta"
     case ocean    = "Ocean"
     case forest   = "Forest"
@@ -288,7 +307,8 @@ public enum AppTheme: String, CaseIterable, Identifiable {
 
     public var displayName: String {
         switch self {
-        case .claude:   "Terracotta (Default)"
+        case .black:    "Black"
+        case .claude:   "Terracotta"
         case .ocean:    "Ocean (Blue)"
         case .forest:   "Forest (Green)"
         case .lavender: "Lavender (Purple)"
@@ -299,6 +319,7 @@ public enum AppTheme: String, CaseIterable, Identifiable {
 
     public var colors: ThemeColors {
         switch self {
+        case .black:    .black
         case .claude:   .claude
         case .ocean:    .ocean
         case .forest:   .forest
@@ -320,13 +341,13 @@ public final class ThemeStore {
     public static let shared = ThemeStore()
     private init() {}
 
-    public var current: AppTheme = .claude {
+    public var current: AppTheme = .black {
         didSet {
             colors = current.colors
             NotificationCenter.default.post(name: .groveThemeDidChange, object: nil)
         }
     }
-    public var colors: ThemeColors = .claude
+    public var colors: ThemeColors = .black
 
     public static let minFontSizeAdjustment: Int = -5
     public static let maxFontSizeAdjustment: Int = 8

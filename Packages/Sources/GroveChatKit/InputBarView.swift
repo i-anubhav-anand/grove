@@ -209,7 +209,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             focusTrigger: inputFocusTrigger,
             font: .systemFont(ofSize: ClaudeTheme.size(14)),
             textColor: NSColor(ClaudeTheme.textPrimary),
-            placeholder: String(localized: "Type a message...", bundle: .module),
+            placeholder: String(localized: "Add a follow up", bundle: .module),
             onReturn: handleReturnKey,
             onShiftReturn: handleShiftReturnKey,
             onUpArrow: { handleUpArrow() == .handled },
