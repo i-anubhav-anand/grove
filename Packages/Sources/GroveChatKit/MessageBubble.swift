@@ -14,7 +14,6 @@ struct MessageBubble: View {
     @State private var isLongTextExpanded = false
     @State private var hoveredBlockId: String? = nil
     @State private var isHoveringUserBubble = false
-    @State private var processExpanded = false
 
     /// Threshold (character count) for collapsing long text
     private static let longTextThreshold = 500
@@ -42,49 +41,22 @@ struct MessageBubble: View {
                     // Error message: warning-style bubble
                     errorBubble
                 } else {
-                    // Assistant message: render blocks in order
-                    let hidden = message.isStreaming ? [] : message.blocks.compactMap(\.toolCall).filter { isTransientTool($0) && $0.hasNonEmptyResult }
-                    // Filter to only renderable blocks — exclude hidden transient tool blocks from ForEach
-                    // to prevent zero-height TupleViews from introducing VStack spacing.
-                    // Adjacent text blocks made contiguous by hidden tools are merged into a single bubble
-                    // (so continuous text Claude sent across turns due to tool_use appears as one bubble)
+                    // Render blocks in order. During streaming show everything;
+                    // after completion show only blocks with content/results.
                     let visibleBlocks = Self.mergeAdjacentTextBlocks(
                         in: message.blocks.filter { block in
                             if let text = block.text { return !text.isEmpty }
                             if let toolCall = block.toolCall {
                                 if message.isStreaming { return true }
-                                if isTransientTool(toolCall) { return false }
-                                // Agent/Edit/Write tools are always shown even without a result
-                                // Agent/Edit/Write/AskUserQuestion are always shown even without a result
                                 if toolCall.isKeepAlways { return true }
-                                // Other non-transient tools: only show when there is a result or error (prevents empty tool bubbles)
                                 return toolCall.result != nil || toolCall.isError
                             }
                             if block.isThinking { return true }
                             return false
                         }
                     )
-
-                    // Hidden tool summary — shown before text (reflects tool execution → text response order)
-                    if !hidden.isEmpty {
-                        transientToolSummary(hidden: hidden)
-                    }
-
-                    // Fold the "process" (leading thinking + tool calls) into a
-                    // collapsible summary; the final answer text renders directly.
-                    let split = Self.splitProcessAndAnswer(visibleBlocks)
-                    let toolCount = split.process.filter { $0.toolCall != nil }.count
-                    let shouldFold = !message.isStreaming && !split.answer.isEmpty && (toolCount >= 1 || split.process.count >= 2)
-
-                    if shouldFold {
-                        processFold(processBlocks: split.process, toolCount: toolCount, hasHiddenTools: !hidden.isEmpty)
-                        ForEach(split.answer) { block in
-                            blockView(block, hasHiddenTools: !hidden.isEmpty)
-                        }
-                    } else {
-                        ForEach(visibleBlocks) { block in
-                            blockView(block, hasHiddenTools: !hidden.isEmpty)
-                        }
+                    ForEach(visibleBlocks) { block in
+                        blockView(block)
                     }
                 }
 
@@ -127,63 +99,10 @@ struct MessageBubble: View {
         }
     }
 
-    // MARK: - Process Fold (thinking + tool calls collapsed)
-
-    /// Split an assistant message's blocks into the leading "process" (thinking +
-    /// tool calls + intermediate text) and the trailing answer text.
-    static func splitProcessAndAnswer(_ blocks: [MessageBlock]) -> (process: [MessageBlock], answer: [MessageBlock]) {
-        var i = blocks.count
-        while i > 0, let t = blocks[i - 1].text, !t.isEmpty { i -= 1 }
-        return (Array(blocks[0..<i]), Array(blocks[i...]))
-    }
-
-    private func foldLabel(toolCount: Int, total: Int) -> String {
-        if toolCount > 0 {
-            let t = "\(toolCount) tool call\(toolCount == 1 ? "" : "s")"
-            let m = "\(total) message\(total == 1 ? "" : "s")"
-            return "\(t), \(m)"
-        }
-        return "\(total) step\(total == 1 ? "" : "s")"
-    }
-
     @ViewBuilder
-    private func processFold(processBlocks: [MessageBlock], toolCount: Int, hasHiddenTools: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) { processExpanded.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: processExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: ClaudeTheme.messageSize(9), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text(foldLabel(toolCount: toolCount, total: processBlocks.count))
-                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                    Image(systemName: "terminal")
-                        .font(.system(size: ClaudeTheme.messageSize(10)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Spacer(minLength: 0)
-                }
-                .padding(.vertical, 3)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if processExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(processBlocks) { block in
-                        blockView(block, hasHiddenTools: hasHiddenTools)
-                    }
-                }
-                .padding(.leading, 10)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func blockView(_ block: MessageBlock, hasHiddenTools: Bool) -> some View {
+    private func blockView(_ block: MessageBlock) -> some View {
         if let text = block.text, !text.isEmpty {
-            assistantTextBubble(text: text, blockId: block.id, hasHiddenTools: hasHiddenTools)
+            assistantTextBubble(text: text, blockId: block.id)
         }
         if let toolCall = block.toolCall {
             if toolCall.name == "AskUserQuestion" {
@@ -330,7 +249,7 @@ struct MessageBubble: View {
 
     // MARK: - Assistant Text Bubble
 
-    private func assistantTextBubble(text: String, blockId: String, hasHiddenTools: Bool = false) -> some View {
+    private func assistantTextBubble(text: String, blockId: String) -> some View {
         // "Last block" for cursor purposes means the last TEXT block — a trailing
         // thinking block (rare but possible) must not strip the streaming cursor.
         let lastText = message.blocks.last(where: \.isText)
@@ -369,13 +288,6 @@ struct MessageBubble: View {
             }
         }
         .onHover { hoveredBlockId = $0 ? blockId : nil }
-        .onTapGesture {
-            if hasHiddenTools {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    showTransientTools.toggle()
-                }
-            }
-        }
         .accessibilityLabel("Assistant: \(text)")
     }
 
@@ -435,20 +347,6 @@ struct MessageBubble: View {
         .opacity(0.8)
     }
 
-    // MARK: - Transient Tool Helpers
-
-    /// Read, Grep, Glob, Bash etc. are collapsed into a summary after streaming completes
-    private func isTransientTool(_ toolCall: ToolCall) -> Bool {
-        let cat = ToolCategory(toolName: toolCall.name)
-        return cat == .readOnly || cat == .execution
-    }
-
-    /// Merges adjacent text blocks made contiguous by hidden transient tools.
-    /// Displays continuous text Claude split across turns due to tool_use as a single bubble.
-    ///
-    /// Join rule: respects original trailing/leading whitespace; adds a single space only when
-    /// neither side has whitespace. Forced paragraph breaks would split bullets mid-list,
-    /// so they are avoided — even text following a complete sentence joins naturally with a single space.
     private static func mergeAdjacentTextBlocks(in blocks: [MessageBlock]) -> [MessageBlock] {
         var result: [MessageBlock] = []
         for block in blocks {
@@ -466,39 +364,6 @@ struct MessageBubble: View {
             }
         }
         return result
-    }
-
-    @State private var showTransientTools = false
-
-    private func transientToolSummary(hidden: [ToolCall]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    showTransientTools.toggle()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: ClaudeTheme.messageSize(11)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text(String(format: String(localized: "%lld tools executed", bundle: .module), hidden.count))
-                        .font(.system(size: ClaudeTheme.messageSize(12)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Image(systemName: showTransientTools ? "chevron.up" : "chevron.down")
-                        .font(.system(size: ClaudeTheme.messageSize(9)))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if showTransientTools {
-                ForEach(hidden, id: \.id) { toolCall in
-                    PlainActivityRow(item: .toolCall(toolCall))
-                }
-            }
-        }
     }
 
     private var bubbleShape: UnevenRoundedRectangle {
