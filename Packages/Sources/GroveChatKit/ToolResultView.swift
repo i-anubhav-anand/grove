@@ -118,6 +118,9 @@ struct ToolResultView: View {
                    let newStr = toolCall.input["new_string"]?.stringValue {
                     ClaudeThemeDivider()
                     editDiffView(oldString: oldStr, newString: newStr)
+                } else if isBashTool, bashCommand != nil {
+                    ClaudeThemeDivider()
+                    bashTerminalView
                 } else if let result = toolCall.result, !result.isEmpty {
                     ClaudeThemeDivider()
 
@@ -146,8 +149,47 @@ struct ToolResultView: View {
     }
 
     private var hasExpandableContent: Bool {
-        isEditTool && toolCall.input["old_string"]?.stringValue != nil
-            && toolCall.input["new_string"]?.stringValue != nil
+        (isEditTool && toolCall.input["old_string"]?.stringValue != nil
+            && toolCall.input["new_string"]?.stringValue != nil)
+            || (isBashTool && bashCommand != nil)
+    }
+
+    // MARK: - Bash Terminal
+
+    private var isBashTool: Bool { toolNameLower == "bash" }
+
+    private var bashCommand: String? { toolCall.input["command"]?.stringValue }
+
+    /// Renders a Bash tool call as a standard terminal block: the command on a
+    /// `$` prompt line, output below, on a dark code background.
+    private var bashTerminalView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let cmd = bashCommand {
+                HStack(alignment: .top, spacing: 6) {
+                    Text(verbatim: "$")
+                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .bold, design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.accent)
+                    Text(cmd)
+                        .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.textPrimary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if let result = toolCall.result, !result.isEmpty {
+                ScrollView {
+                    Text(result)
+                        .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                        .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 220)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func editHunksFromToolInput() -> [PreviewFile.EditHunk] {
