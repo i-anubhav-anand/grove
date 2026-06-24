@@ -87,7 +87,7 @@ struct ProjectWindowView: View {
                     FileTreeView(projectPath: project.path, searchTrigger: $fileSearchTrigger)
                 }
             case .history:
-                HistoryListView()
+                WorkspaceListView()
             }
 
             SidebarTabShortcuts(sidebarTab: $sidebarTab, fileSearchTrigger: $fileSearchTrigger, columnVisibility: $columnVisibility)

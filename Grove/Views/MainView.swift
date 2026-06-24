@@ -138,10 +138,10 @@ struct MainView: View {
                 case .files:
                     FileTreeView(projectPath: windowState.selectedProject!.path, searchTrigger: $fileSearchTrigger)
                 case .history:
-                    HistoryListView()
+                    WorkspaceListView()
                 }
             } else {
-                HistoryListView()
+                WorkspaceListView()
             }
 
             if windowState.selectedProject != nil {
