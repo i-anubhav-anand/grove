@@ -5,10 +5,81 @@ All notable changes to **Grove** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-06-25
 
-> Target: `0.2.0` — feature-complete **preview** (not yet a stable `1.0`; see
-> "Known limitations").
+> Cockpit refinement release — per-session worktree isolation, a unified
+> `~/Grove` home, image attachments that actually reach the model, a calmer
+> Conductor-style transcript, and a rebuilt right inspector. Still a **preview**
+> (not yet a stable `1.0`; see "Known limitations").
+
+### Added
+
+- **Per-session worktrees.** Every new chat now spins up its own isolated git
+  worktree (not just one per workspace), so parallel sessions never collide on
+  the working tree. Worktree branches are named after places (e.g. `missoula`)
+  instead of being derived from the prompt.
+- **Unified `~/Grove` home.** A single managed storage root with
+  `repos/`, `workspaces/`, and `archived-contexts/`, plus full create / rename /
+  delete (CRUD) for projects, workspaces, and sessions — with confirm dialogs
+  for destructive actions in the sidebar.
+- **Grove's own GitHub OAuth app.** Login uses Grove's first-party OAuth client
+  ID instead of a borrowed one.
+- **Unified "+" / Project menu** — Open project · Open GitHub project · Quick
+  start (create a fresh local git repo ready for an agent).
+- **Resizable right inspector** — drag handle with a persisted width
+  (`@AppStorage`), moved out of the `HSplitView` so it no longer fights the
+  chat pane for layout.
+- **Image paste & attachment delivery** — pasted/dropped images are always
+  attached, advertised on the pasteboard so paste reliably fires, and delivered
+  to the model via file paths in the prompt (Clarc-style) rather than base64
+  stdin blocks.
+
+### Changed
+
+- **Calmer, Conductor-style transcript.** Tool calls render as compact one-line
+  activity rows (icon · action · target · status) instead of heavy cards; Bash
+  shows as a terminal block and edits as file-edit pills with a hover diff
+  preview. Tool output expands inline with **Show more / Show less** and no
+  inner scroll box (so hovering never traps page scroll).
+- **Plain, card-free activity rows** unify tool calls and thinking blocks; the
+  mid-stream streaming-indicator box and tool-grouping were removed, and
+  thinking-only turns fold into a single turn summary. Assistant text gains a
+  subtle emerge animation when streaming completes.
+- **Sidebar simplified** to one row per session (worktree folded in, no
+  duplicate workspace row); the branch icon is colored by GitHub PR state
+  (green = open, purple = merged).
+- **Cleaner chat header** — removed the project-folder tab strip and the
+  per-session tab bar above the chat; navigation now lives entirely in the
+  sidebar. The title bar shows just `Grove(<version>)` (no CLI version).
+- **Flatter message bubbles** — uniform 4 pt corners for a squarer, more
+  segmented look.
+- **Typography** — response text matches the activity-row size (12 pt) and
+  markdown inherits font via `.font()` rather than hard-coded sizes.
+- Session files are now resolved by id across working directories and the app
+  watches the whole `~/.claude/projects/` tree instead of per-project roots.
+
+### Fixed
+
+- **Repeated keychain password prompts on launch.** The GitHub token is now
+  stored with `delete-then-add` + `SecAccessCreate` (empty trusted list) instead
+  of `SecItemUpdate`, so it is never ACL-locked to a specific binary under
+  ad-hoc signing; a one-time migration re-saves the token on first read.
+- **Lost chat session on reopen / switch.** Session lookup scans each
+  workspace's worktree path (where the CLI actually writes session JSONL), and
+  the workspace binding + cwd are restored when switching sessions.
+- **Auto permission mode** no longer prompts — it auto-approves tool requests as
+  intended.
+- **Right-panel tabs** follow the selected project instead of a stale workspace.
+- **`ANTHROPIC_API_KEY` is stripped** from the CLI subprocess environment.
+
+### Security
+
+- Removed `ANTHROPIC_API_KEY` from the spawned `claude` CLI environment so a
+  user's ambient key is never forwarded to the subprocess.
+
+## [0.2.0] - 2026-06-24
+
+> Feature-complete **preview** (not yet a stable `1.0`; see "Known limitations").
 
 ### Added
 
@@ -81,5 +152,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     creation, skills marketplace, sessions/history, settings, onboarding.
   - `WorktreeKit` — verified per-workspace git worktree isolation primitive.
 
-[Unreleased]: https://github.com/i-anubhav-anand/grove/compare/v0.1.0...HEAD
+[0.5.0]: https://github.com/i-anubhav-anand/grove/compare/v0.2.0...v0.5.0
+[0.2.0]: https://github.com/i-anubhav-anand/grove/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/i-anubhav-anand/grove/releases/tag/v0.1.0

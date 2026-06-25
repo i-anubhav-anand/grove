@@ -78,11 +78,7 @@ struct MainView: View {
                 }
                 .navigationTitle({
                     let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
-                    let base = "Grove(\(appVersion))"
-                    if let cliVersion = appState.claudeVersion {
-                        return "\(base) — CC \(cliVersion)"
-                    }
-                    return base
+                    return "Grove(\(appVersion))"
                 }())
                 .toolbar {
                     if columnVisibility != .detailOnly {
