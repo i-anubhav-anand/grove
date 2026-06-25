@@ -579,7 +579,28 @@ public actor CLISessionStore {
     }
 
     private func jsonlURL(sid: String, cwd: String) async -> URL {
-        await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
+        let primary = await directory(forCwd: cwd).appendingPathComponent("\(sid).jsonl")
+        if FileManager.default.fileExists(atPath: primary.path) { return primary }
+        // The session may actually live under a different cwd (a per-session
+        // worktree, or a `claude` run from another terminal in the same repo).
+        // Find the jsonl by id across all CLI project dirs so switching never
+        // loses context just because we guessed the wrong cwd.
+        if let found = await jsonlURL(forSessionId: sid) { return found }
+        return primary
+    }
+
+    /// Locate a session's jsonl by id alone, scanning every `~/.claude/projects/*`
+    /// directory. Independent of cwd — the CLI writes one jsonl per session under
+    /// its working directory, so the id is globally unique.
+    func jsonlURL(forSessionId sid: String) async -> URL? {
+        guard let dirs = try? FileManager.default.contentsOfDirectory(
+            at: CLIProjectsDirectory.url, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) else { return nil }
+        for dir in dirs {
+            let candidate = dir.appendingPathComponent("\(sid).jsonl")
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
+        return nil
     }
 
     // MARK: - External activity detection (S2)

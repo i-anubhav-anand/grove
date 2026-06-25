@@ -823,12 +823,10 @@ final class AppState {
         window.attachments = []
 
         let (resolvedAttachments, tempFilePaths) = AttachmentFactory.resolvingClipboardImages(currentAttachments)
-        let imageBlocks = AttachmentFactory.imageBlocks(from: resolvedAttachments)
-        let fullPrompt = buildPromptWithAttachments(prompt, attachments: resolvedAttachments,
-                                                    excludingImageIDs: Set(imageBlocks.map(\.sourceID)))
+        let fullPrompt = buildPromptWithAttachments(prompt, attachments: resolvedAttachments)
 
         await sendPrompt(fullPrompt, displayText: prompt, attachments: resolvedAttachments,
-                         tempFilePaths: tempFilePaths, imageBlocks: imageBlocks, in: window)
+                         tempFilePaths: tempFilePaths, in: window)
     }
 
     /// Slash commands handled natively. Returns true if handled.
@@ -2616,16 +2614,11 @@ final class AppState {
         window.attachments.removeAll { $0.id == id }
     }
 
-    private func buildPromptWithAttachments(
-        _ text: String,
-        attachments: [Attachment],
-        excludingImageIDs: Set<UUID> = []
-    ) -> String {
-        // Images sent as base64 blocks don't need a textual `[Attached image: …]` line —
-        // the path is often a temp file and just adds noise the model can't act on.
-        let textual = attachments.filter { !excludingImageIDs.contains($0.id) }
-        guard !textual.isEmpty else { return text }
-        let attachmentLines = textual.map(\.promptContext).joined(separator: "\n")
+    private func buildPromptWithAttachments(_ text: String, attachments: [Attachment]) -> String {
+        guard !attachments.isEmpty else { return text }
+        // Each attachment (image/file/text/link) becomes a `[Attached …: <path>]`
+        // line the CLI can read. Images are written to temp files first.
+        let attachmentLines = attachments.map(\.promptContext).joined(separator: "\n")
         let userText = text.isEmpty ? "See attached files" : text
         return "\(attachmentLines)\n\n\(userText)"
     }
@@ -2797,9 +2790,7 @@ final class AppState {
         else { window.draftQueues[sessionKey] = queue }
 
         let (resolvedAttachments, tempFilePaths) = AttachmentFactory.resolvingClipboardImages(next.attachments)
-        let imageBlocks = AttachmentFactory.imageBlocks(from: resolvedAttachments)
-        let prompt = buildPromptWithAttachments(next.text, attachments: resolvedAttachments,
-                                                excludingImageIDs: Set(imageBlocks.map(\.sourceID)))
+        let prompt = buildPromptWithAttachments(next.text, attachments: resolvedAttachments)
         let displayText = next.text
         let streamId = UUID()
 
@@ -2835,7 +2826,6 @@ final class AppState {
                 effort: effort,
                 hookSettingsPath: hookSettingsPath,
                 permissionMode: currentPermissionMode,
-                imageBlocks: imageBlocks,
                 projectId: projectId,
                 window: window
             )

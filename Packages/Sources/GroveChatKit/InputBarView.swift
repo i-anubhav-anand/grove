@@ -330,10 +330,12 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
     private func handlePaste() -> Bool {
         let pb = NSPasteboard.general
 
+        // A raw image on the clipboard (screenshot / "copy image") is always
+        // attached: there's no plain-text fallback, and an explicit paste is
+        // explicit intent. (autoPreviewSettings only gates auto-converting pasted
+        // text / file paths / URLs into preview chips.)
         if let attachment = imageAttachmentFromPasteboard(pb) {
-            if chatBridge.autoPreviewSettings.image {
-                windowState.addAttachment(attachment)
-            }
+            windowState.addAttachment(attachment)
             return true
         }
 

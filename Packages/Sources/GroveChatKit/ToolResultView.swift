@@ -6,7 +6,7 @@ struct ToolResultView: View {
     var isMessageStreaming: Bool = false
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
-    @State private var isResultExpanded = false
+    @State private var outputExpanded = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -49,87 +49,51 @@ struct ToolResultView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Header + Input summary (both clickable)
+        VStack(alignment: .leading, spacing: 4) {
+            // Compact one-line row: icon · action+target · status · chevron.
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.toggle()
                 }
             } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Image(systemName: sfSymbol)
-                            .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                            .foregroundStyle(iconColor)
-                            .frame(width: 16, height: 16)
+                HStack(spacing: 7) {
+                    Image(systemName: sfSymbol)
+                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .foregroundStyle(iconColor)
+                        .frame(width: 15, height: 15)
 
-                        if toolNameLower == "agent" {
-                            Text(agentDisplayTitle)
-                                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                        } else if let skillName = skillName {
-                            Text(skillName)
-                                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                        } else {
-                            Text(toolCall.name)
-                                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
-                                .foregroundStyle(ClaudeTheme.textPrimary)
-                        }
+                    headerLabel
+                        .lineLimit(1)
 
-                        Spacer()
+                    Spacer(minLength: 6)
 
-                        if toolCall.isError {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusError)
-                                .font(.caption)
-                                .accessibilityLabel("Error occurred")
-                        } else if toolCall.result != nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(ClaudeTheme.statusSuccess)
-                                .font(.caption)
-                                .accessibilityLabel("Completed")
-                        } else if isMessageStreaming {
-                            ProgressView()
-                                .controlSize(.mini)
-                                .accessibilityLabel("Running")
-                        } else {
-                            Image(systemName: "minus.circle.fill")
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                                .font(.caption)
-                                .accessibilityLabel("Interrupted")
-                        }
+                    statusIndicator
 
-                        if toolCall.result != nil || hasExpandableContent {
-                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                .font(.caption2)
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                        }
+                    if toolCall.result != nil || hasExpandableContent {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(ClaudeTheme.textTertiary)
                     }
-
-                    inputSummaryView
-                        .lineLimit(isExpanded ? nil : 1)
                 }
+                .padding(.vertical, 2)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            // Expanded detail
+            // Expanded detail — each detail kind carries its own subtle background.
             if isExpanded {
                 if isEditTool, let oldStr = toolCall.input["old_string"]?.stringValue,
                    let newStr = toolCall.input["new_string"]?.stringValue {
-                    ClaudeThemeDivider()
                     editDiffView(oldString: oldStr, newString: newStr)
                 } else if isBashTool, bashCommand != nil {
-                    ClaudeThemeDivider()
                     bashTerminalView
                 } else if let result = toolCall.result, !result.isEmpty {
-                    ClaudeThemeDivider()
-                    resultTextView(result)
+                    resultText(result)
+                        .padding(8)
+                        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
                 }
             }
         }
-        .bubbleStyle(toolCall.isError ? .toolError : .tool)
         .onChange(of: toolCall.result) { _, newResult in
             guard ToolCategory(toolName: toolNameLower).isTransient, newResult != nil else { return }
             isExpanded = false
@@ -144,7 +108,7 @@ struct ToolResultView: View {
     private func resultTextView(_ result: String, monospaced: Bool = false, color: Color = ClaudeTheme.textPrimary) -> some View {
         let lines = result.components(separatedBy: .newlines)
         let needsToggle = lines.count > Self.resultLineThreshold
-        let visibleText = needsToggle && !isResultExpanded
+        let visibleText = needsToggle && !outputExpanded
             ? lines.prefix(Self.resultLineThreshold).joined(separator: "\n")
             : result
         VStack(alignment: .leading, spacing: 0) {
@@ -155,18 +119,18 @@ struct ToolResultView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if needsToggle {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) { isResultExpanded.toggle() }
+                    withAnimation(.easeInOut(duration: 0.2)) { outputExpanded.toggle() }
                 } label: {
                     HStack(spacing: 6) {
                         Group {
-                            if isResultExpanded {
+                            if outputExpanded {
                                 Text("Show less", bundle: .module)
                             } else {
                                 Text("Show more", bundle: .module)
                             }
                         }
                         .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                        Image(systemName: isResultExpanded ? "chevron.up" : "chevron.down")
+                        Image(systemName: outputExpanded ? "chevron.up" : "chevron.down")
                             .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                     }
                     .foregroundStyle(ClaudeTheme.textTertiary)
@@ -213,12 +177,51 @@ struct ToolResultView: View {
                 }
             }
             if let result = toolCall.result, !result.isEmpty {
-                resultTextView(result, monospaced: true, color: toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
+                resultText(result)
             }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Expanded tool/command output rendered inline (no inner scroll view — so
+    /// hovering never traps the page scroll). Long output is capped to a sane
+    /// number of lines with a Show more / Show less toggle.
+    private static let outputLineCap = 40
+
+    @ViewBuilder
+    private func resultText(_ result: String) -> some View {
+        let lines = result.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let needsToggle = lines.count > Self.outputLineCap
+        let shown = (needsToggle && !outputExpanded) ? Array(lines.prefix(Self.outputLineCap)) : lines
+        VStack(alignment: .leading, spacing: 6) {
+            Text(shown.joined(separator: "\n"))
+                .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                .foregroundStyle(toolCall.isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if needsToggle {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { outputExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Group {
+                            if outputExpanded {
+                                Text("Show less", bundle: .module)
+                            } else {
+                                Text("Show more", bundle: .module)
+                            }
+                        }
+                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                        Image(systemName: outputExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
+                    }
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 
     private func editHunksFromToolInput() -> [PreviewFile.EditHunk] {
@@ -340,6 +343,42 @@ struct ToolResultView: View {
         }
         .buttonStyle(.plain)
         .pointerCursorOnHover()
+    }
+
+    /// The single compact label: a clickable file summary for edits/writes, else
+    /// a concise "action — target" string (agent title, skill, or input summary).
+    @ViewBuilder
+    private var headerLabel: some View {
+        if (isEditTool || toolNameLower == "write"),
+           toolCall.input["file_path"]?.stringValue != nil {
+            inputSummaryView
+        } else {
+            Text(primaryLabel)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+        }
+    }
+
+    private var primaryLabel: String {
+        if toolNameLower == "agent" { return agentDisplayTitle }
+        if let skillName { return "Skill — \(skillName)" }
+        return inputSummary
+    }
+
+    /// Subtle trailing status: error or a running spinner. Completed tools show
+    /// nothing (the row itself is the record) to keep the transcript clean.
+    @ViewBuilder
+    private var statusIndicator: some View {
+        if toolCall.isError {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.caption)
+                .foregroundStyle(ClaudeTheme.statusError)
+                .accessibilityLabel("Error occurred")
+        } else if toolCall.result == nil && isMessageStreaming {
+            ProgressView()
+                .controlSize(.mini)
+                .accessibilityLabel("Running")
+        }
     }
 
     @ViewBuilder

@@ -530,27 +530,15 @@ actor ClaudeService {
             self.processes[streamId] = proc
             self.stdinHandles[streamId] = stdinHandle
 
-            // Send the initial user prompt as an NDJSON user message. Image attachments
-            // ride along as base64 image blocks so the model actually sees them — a text
-            // path reference alone never reaches the model's vision input.
-            var content: [[String: Any]] = imageBlocks.map { block in
-                [
-                    "type": "image",
-                    "source": [
-                        "type": "base64",
-                        "media_type": block.mediaType,
-                        "data": block.base64,
-                    ],
-                ]
-            }
-            if !prompt.isEmpty || content.isEmpty {
-                content.append(["type": "text", "text": prompt])
-            }
+            // Send the initial user prompt as an NDJSON user message. Image
+            // attachments are referenced by file path in the prompt text (written to
+            // temp files first); the CLI reads them. Inlining huge base64 blocks on a
+            // single stdin line breaks the NDJSON parse, so we don't.
             let userMessage: [String: Any] = [
                 "type": "user",
                 "message": [
                     "role": "user",
-                    "content": content,
+                    "content": [["type": "text", "text": prompt]],
                 ]
             ]
             try Self.writeJSONLine(userMessage, to: stdinHandle)
