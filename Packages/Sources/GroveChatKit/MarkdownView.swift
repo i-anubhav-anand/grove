@@ -57,10 +57,12 @@ struct MarkdownContentView: View {
                 switch group {
                 case .attributedText(let attrStr):
                     Text(attrStr)
+                        .font(.system(size: ClaudeTheme.messageSize(12)))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .blockquote(let attrStr):
                     BlockquoteView(content: attrStr)
+                        .font(.system(size: ClaudeTheme.messageSize(12)))
                 case .codeBlock(let language, let code):
                     CodeBlockView(language: language, code: code)
                         .padding(.vertical, 8)
@@ -144,10 +146,9 @@ struct MarkdownContentView: View {
             current.append(sep)
         }
 
-        func appendPrefixed(prefix: String, content: String, contentColor: Color? = nil, thinSep: Bool = false, prefixFont: Font = .system(size: ClaudeTheme.messageSize(12))) {
+        func appendPrefixed(prefix: String, content: String, contentColor: Color? = nil, thinSep: Bool = false) {
             addNewline(thinSpacing: thinSep)
             var prefixAttr = AttributedString(prefix)
-            prefixAttr.font = prefixFont
             prefixAttr.foregroundColor = ClaudeTheme.accent
             current.append(prefixAttr)
             var itemText = inlineMarkdown(content)
@@ -207,7 +208,7 @@ struct MarkdownContentView: View {
                 let isFirstBullet = hasContent && !inListOrQuote
                 afterSpacer = false
                 inListOrQuote = true
-                appendPrefixed(prefix: "  \u{2022} ", content: content, thinSep: isFirstBullet, prefixFont: .system(size: ClaudeTheme.messageSize(12)))
+                appendPrefixed(prefix: "  \u{2022} ", content: content, thinSep: isFirstBullet)
 
             case .orderedListItem(let number, let content):
                 if hasContent && afterSpacer && inListOrQuote {
@@ -216,7 +217,7 @@ struct MarkdownContentView: View {
                 let isFirstOrdered = hasContent && !inListOrQuote
                 afterSpacer = false
                 inListOrQuote = true
-                appendPrefixed(prefix: "  \(number). ", content: content, thinSep: isFirstOrdered, prefixFont: .system(size: ClaudeTheme.messageSize(12)).monospacedDigit())
+                appendPrefixed(prefix: "  \(number). ", content: content, thinSep: isFirstOrdered)
 
             case .blockquote(let content):
                 if quoteHasContent {
@@ -501,34 +502,12 @@ private func parseInlineMarkdown(_ content: String) -> AttributedString {
     ) else {
         return AttributedString(content)
     }
-    // Apply base font per-run to preserve bold/italic emphasis from markdown parsing
-    var codeRanges: [Range<AttributedString.Index>] = []
-    let base = ClaudeTheme.messageSize(12)
-    let codeSize = ClaudeTheme.messageSize(11)
+    // Inline code spans: styling only — no explicit font size so the view's .font() controls size.
+    // Bold/italic/code rendering is handled automatically by SwiftUI via inlinePresentationIntent.
     for run in result.runs {
-        guard let intent = run.inlinePresentationIntent else {
-            result[run.range].font = .system(size: base)
-            continue
-        }
-        if intent.contains(.code) {
-            codeRanges.append(run.range)
-        } else {
-            let isBold = intent.contains(.stronglyEmphasized)
-            let isItalic = intent.contains(.emphasized)
-            switch (isBold, isItalic) {
-            case (true, true):  result[run.range].font = .system(size: base, weight: .bold).italic()
-            case (true, false): result[run.range].font = .system(size: base, weight: .bold)
-            case (false, true): result[run.range].font = .system(size: base).italic()
-            default:            result[run.range].font = .system(size: base)
-            }
-        }
-    }
-    // Inline code spans: monospace font + background color
-    for range in codeRanges.reversed() {
-        result[range].font = .system(size: codeSize, design: .monospaced)
-        result[range].foregroundColor = ClaudeTheme.textPrimary
-        result[range].backgroundColor = ClaudeTheme.surfaceTertiary
-        result[range].baselineOffset = 0.5
+        guard let intent = run.inlinePresentationIntent, intent.contains(.code) else { continue }
+        result[run.range].foregroundColor = ClaudeTheme.textPrimary
+        result[run.range].backgroundColor = ClaudeTheme.surfaceTertiary
     }
     return result
 }
