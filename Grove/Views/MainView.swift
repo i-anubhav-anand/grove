@@ -122,6 +122,7 @@ struct MainView: View {
                         }
                     }
                 }
+                .layoutPriority(1)
 
                 if inspectorStarted {
                     InspectorPanel()
@@ -568,8 +569,8 @@ struct InspectorPanel: View {
         }
         .background(ClaudeTheme.surfaceElevated)
         .frame(
-            minWidth: windowState.showInspector ? 300 : 0,
-            idealWidth: windowState.showInspector ? 300 : 0,
+            minWidth: windowState.showInspector ? 160 : 0,
+            idealWidth: windowState.showInspector ? 160 : 0,
             maxWidth: windowState.showInspector ? .infinity : 0
         )
         .opacity(windowState.showInspector ? 1 : 0)
