@@ -13,6 +13,7 @@ struct MainView: View {
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
     @State private var inspectorStarted = true
+    @AppStorage("inspectorPanelWidth") private var inspectorWidth: Double = 400
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var projectToDelete: Project? = nil
     @State private var projectToRename: Project? = nil
@@ -35,6 +36,7 @@ struct MainView: View {
         if !appState.onboardingCompleted {
             OnboardingView()
         } else {
+            HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     sidebarContent
@@ -123,10 +125,6 @@ struct MainView: View {
                     }
                 }
                 .layoutPriority(1)
-
-                if inspectorStarted {
-                    InspectorPanel()
-                }
             }
             .overlay {
                 CommandPaletteView(isPresented: $showCommandPalette)
@@ -136,6 +134,26 @@ struct MainView: View {
                             .hidden()
                     }
             }
+
+            if inspectorStarted && windowState.showInspector {
+                Rectangle()
+                    .fill(ClaudeTheme.border)
+                    .frame(width: 1)
+                    .gesture(
+                        DragGesture(minimumDistance: 1)
+                            .onChanged { value in
+                                let newWidth = inspectorWidth - value.translation.width
+                                inspectorWidth = max(200, min(800, newWidth))
+                            }
+                    )
+                    .onHover { inside in
+                        if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                    }
+
+                InspectorPanel()
+                    .frame(width: CGFloat(inspectorWidth))
+            }
+            } // HStack
         }
     }
 
@@ -568,12 +586,6 @@ struct InspectorPanel: View {
                 .clipped()
         }
         .background(ClaudeTheme.surfaceElevated)
-        .frame(
-            minWidth: windowState.showInspector ? 160 : 0,
-            idealWidth: windowState.showInspector ? 400 : 0,
-            maxWidth: windowState.showInspector ? .infinity : 0
-        )
-        .opacity(windowState.showInspector ? 1 : 0)
         .clipped()
         .onChange(of: windowState.inspectorTab) { _, newTab in
             bumpFocus(for: newTab)
