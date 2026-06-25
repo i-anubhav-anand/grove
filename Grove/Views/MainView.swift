@@ -15,9 +15,6 @@ struct MainView: View {
     @State private var inspectorStarted = true
     @AppStorage("inspectorPanelWidth") private var inspectorWidth: Double = 400
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var projectToDelete: Project? = nil
-    @State private var projectToRename: Project? = nil
-    @State private var renameText: String = ""
     @State private var showCommandPalette = false
 
     enum SidebarTab: String, CaseIterable {
@@ -178,72 +175,7 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Chat Toolbar Area (moved from old ChatView)
-
     @Environment(\.openWindow) private var openWindow
-
-    private var chatToolbarArea: some View {
-        HStack(spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 4) {
-                    // isSelected is computed here and passed as a value so ProjectTabButton.body
-                    // does not access windowState.selectedProject — only the 2 changed buttons re-render.
-                    ForEach(appState.projects) { project in
-                        ProjectTabButton(
-                            project: project,
-                            isSelected: windowState.selectedProject?.id == project.id,
-                            projectToDelete: $projectToDelete,
-                            projectToRename: $projectToRename,
-                            renameText: $renameText
-                        )
-                    }
-                }
-            }
-
-            if let ws = windowState.selectedWorkspace {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: ClaudeTheme.size(10)))
-                    Text(ws.branch)
-                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(ClaudeTheme.surfacePrimary, in: Capsule())
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .help("Workspace branch")
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(ClaudeTheme.surfaceElevated)
-        .confirmationDialog(
-            "Delete \"\(projectToDelete?.name ?? "")\"?",
-            isPresented: Binding(
-                get: { projectToDelete != nil },
-                set: { if !$0 { projectToDelete = nil } }
-            ),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if let project = projectToDelete {
-                    Task { await appState.deleteProject(project, in: windowState) }
-                }
-                projectToDelete = nil
-            }
-            Button("Cancel", role: .cancel) { projectToDelete = nil }
-        } message: {
-            Text("This will remove the project from Grove. The files on disk will not be deleted.")
-        }
-        .sheet(item: $projectToRename) { project in
-            RenameProjectSheet(name: $renameText) {
-                Task { await appState.renameProject(project, to: renameText) }
-            }
-        }
-    }
 
     // MARK: - Detail
 
@@ -251,10 +183,6 @@ struct MainView: View {
         Group {
             if windowState.selectedProject != nil {
                 VStack(spacing: 0) {
-                    chatToolbarArea
-                    ClaudeThemeDivider()
-                    WorkspaceChatTabs()
-                    ClaudeThemeDivider()
                     ChatView {
                         ChatToolbarControls(placement: .composer)
                     }
@@ -386,59 +314,6 @@ struct DetailToolbar: View {
                     .help("Settings")
                 }
             }
-    }
-}
-
-// MARK: - Project Tab Button (isolated — isSelected passed as value, body reads no @Observable properties)
-
-struct ProjectTabButton: View {
-    @Environment(AppState.self) private var appState
-    @Environment(WindowState.self) private var windowState
-    @Environment(\.openWindow) private var openWindow
-
-    let project: Project
-    let isSelected: Bool
-    @Binding var projectToDelete: Project?
-    @Binding var projectToRename: Project?
-    @Binding var renameText: String
-
-    var body: some View {
-        Button {
-            appState.selectProject(project, in: windowState)
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "folder.fill")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                Text(project.name)
-                    .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                isSelected ? ClaudeTheme.accent : ClaudeTheme.surfaceSecondary,
-                in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-            )
-        }
-        .buttonStyle(.plain)
-        .onTapGesture(count: 2) {
-            openWindow(id: "project-window", value: ProjectWindowValue(projectId: project.id, instanceId: UUID()))
-        }
-        .contextMenu {
-            Button {
-                renameText = project.name
-                projectToRename = project
-            } label: {
-                Label("Rename Project", systemImage: "pencil")
-            }
-            Divider()
-            Button(role: .destructive) {
-                projectToDelete = project
-            } label: {
-                Label("Delete Project", systemImage: "trash")
-            }
-        }
     }
 }
 

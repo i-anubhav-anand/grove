@@ -375,21 +375,12 @@ struct MessageBubble: View {
     }
 
     private var bubbleShape: UnevenRoundedRectangle {
-        if message.role == .user {
-            return UnevenRoundedRectangle(
-                topLeadingRadius: ClaudeTheme.cornerRadiusLarge,
-                bottomLeadingRadius: ClaudeTheme.cornerRadiusLarge,
-                bottomTrailingRadius: 4,
-                topTrailingRadius: ClaudeTheme.cornerRadiusLarge
-            )
-        } else {
-            return UnevenRoundedRectangle(
-                topLeadingRadius: ClaudeTheme.cornerRadiusLarge,
-                bottomLeadingRadius: 4,
-                bottomTrailingRadius: ClaudeTheme.cornerRadiusLarge,
-                topTrailingRadius: ClaudeTheme.cornerRadiusLarge
-            )
-        }
+        UnevenRoundedRectangle(
+            topLeadingRadius: 4,
+            bottomLeadingRadius: 4,
+            bottomTrailingRadius: 4,
+            topTrailingRadius: 4
+        )
     }
 
     private func submitEdit() {
