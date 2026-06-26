@@ -10,7 +10,6 @@ struct MessageListView: View {
     @State private var settledItems: [ChatMessage] = []
     @State private var scrollTask: Task<Void, Never>?
     @State private var isNearBottom = true
-    @State private var isOlderCollapsed = true
     @State private var isSessionReady = false
 
     private let foldThreshold = 30
@@ -18,43 +17,15 @@ struct MessageListView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Fold older messages when count exceeds threshold
+                // Show all messages with a scroll icon divider at the threshold
                 if settledItems.count > foldThreshold {
                     let hiddenCount = settledItems.count - foldThreshold
-
-                    // Expanded state: show older messages
-                    if !isOlderCollapsed {
-                        messageRows(settledItems.prefix(hiddenCount))
-                    }
-
-                    // Fold toggle button
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            isOlderCollapsed.toggle()
-                        }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Group {
-                                if isOlderCollapsed {
-                                    Text(String(format: String(localized: "Show %lld earlier messages", bundle: .module), hiddenCount))
-                                } else {
-                                    Text("Collapse earlier messages", bundle: .module)
-                                }
-                            }
-                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                            Image(systemName: isOlderCollapsed ? "chevron.down" : "chevron.up")
-                                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                        }
-                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    messageRows(settledItems.prefix(hiddenCount))
+                    Image(systemName: "line.3.horizontal")
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.4))
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
-                                .fill(ClaudeTheme.surfacePrimary.opacity(0.6))
-                        )
-                    }
-                    .buttonStyle(.plain)
-
+                        .padding(.vertical, 6)
                     messageRows(settledItems.suffix(foldThreshold))
                 } else {
                     messageRows(settledItems[...])
@@ -97,7 +68,6 @@ struct MessageListView: View {
         .task(id: windowState.currentSessionId) {
             isSessionReady = false
             scrollTask?.cancel()
-            isOlderCollapsed = true
             scrollPosition = ScrollPosition()
             rebuildSettledItems()
             // Skip scroll/fade delay for empty sessions — appear instantly
