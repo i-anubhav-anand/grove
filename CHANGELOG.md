@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Terminal moved to a docked lower section** of the inspector with **Setup · Run · Terminal**
   sub-tabs, a collapse chevron, a resize handle, and `+` / reset controls — removing the Terminal tab
   from the top bar. The terminal session now survives sub-tab switches and collapse.
+- **Review folded into Changes.** The standalone Review tab is gone — top tabs are now
+  **All files · Changes · Checks · Memo**. When the branch has an open PR, a **"Ready to merge"**
+  header (PR number, mergeable state, Merge button) appears above the tabs, and the Changes header gains
+  **eye** (review comments), **tree** (flat ⇄ folder grouping), and overflow (Refresh / Open PR) actions.
 
 ## [0.5.0] - 2026-06-25
 

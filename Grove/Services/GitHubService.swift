@@ -246,6 +246,18 @@ actor GitHubService {
         return prs.first
     }
 
+    /// `mergeable_state` for a single PR (e.g. "clean" = ready to merge, "blocked", "dirty",
+    /// "behind", "unstable", "draft", "unknown"). The list endpoint omits this; GitHub computes
+    /// it asynchronously, so it may briefly be "unknown".
+    func fetchMergeableState(repoFullName: String, number: Int) async throws -> String? {
+        let parts = repoFullName.split(separator: "/")
+        guard parts.count == 2 else { return nil }
+        let detail: PullRequestDetail = try await apiRequest(
+            path: "/repos/\(parts[0])/\(parts[1])/pulls/\(number)"
+        )
+        return detail.mergeableState
+    }
+
     /// GitHub PR state for a branch (open / merged / closed), or nil if the branch
     /// has no PR. Used to color the workspace's branch icon like GitHub does.
     func fetchBranchPRState(repoFullName: String, branch: String) async throws -> BranchPRState? {
@@ -406,6 +418,12 @@ struct PullRequest: Decodable, Sendable, Identifiable {
         case htmlUrl = "html_url"
         case mergedAt = "merged_at"
     }
+}
+
+/// Single-PR detail subset — just the asynchronously-computed mergeability.
+private struct PullRequestDetail: Decodable {
+    let mergeableState: String?
+    enum CodingKeys: String, CodingKey { case mergeableState = "mergeable_state" }
 }
 
 /// GitHub state of the PR for a workspace's branch — drives the sidebar icon color.

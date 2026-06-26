@@ -5,10 +5,15 @@ import GroveCore
 /// worktree and opens the existing diff view on tap. Bound to `worktreePath`.
 struct ChangesPaneView: View {
     @Environment(WindowState.self) private var windowState
+    @Environment(\.openURL) private var openURL
     let worktreePath: String?
+    /// Shared PR state — drives the eye (review comments) toggle and the kebab's "Open PR".
+    var prModel: PRReviewModel? = nil
 
     @State private var files: [ChangedFile] = []
     @State private var loading = false
+    @State private var showComments = false
+    @State private var groupByFolder = false
 
     struct ChangedFile: Identifiable, Equatable {
         let id = UUID()
@@ -29,51 +34,109 @@ struct ChangesPaneView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(files.isEmpty ? "No changes" : "\(files.count) changed")
+            Text(showComments ? "Review" : (files.isEmpty ? "No changes" : "\(files.count) changed"))
                 .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .foregroundStyle(files.isEmpty ? ClaudeTheme.statusSuccess : ClaudeTheme.textSecondary)
+                .foregroundStyle(files.isEmpty && !showComments ? ClaudeTheme.statusSuccess : ClaudeTheme.textSecondary)
+
             Spacer()
-            Button { Task { await reload() } } label: {
-                Image(systemName: "arrow.clockwise").font(.system(size: ClaudeTheme.size(11)))
+
+            // Review comments (eye) — only when the branch has an open PR.
+            if prModel?.pullRequest != nil {
+                iconButton(showComments ? "eye.fill" : "eye",
+                           help: "Review comments",
+                           tint: showComments ? ClaudeTheme.accent : ClaudeTheme.textSecondary) {
+                    showComments.toggle()
+                }
             }
-            .buttonStyle(.borderless)
-            .help("Refresh")
+
+            // Flat list ⇄ folder grouping.
+            iconButton(groupByFolder ? "list.bullet.indent" : "list.bullet",
+                       help: groupByFolder ? "Flat list" : "Group by folder",
+                       tint: ClaudeTheme.textSecondary) {
+                groupByFolder.toggle()
+            }
+
+            // Overflow.
+            Menu {
+                Button { Task { await reload() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
+                if let pr = prModel?.pullRequest, let url = URL(string: pr.htmlUrl) {
+                    Button { openURL(url) } label: { Label("Open PR #\(pr.number)", systemImage: "arrow.up.right.square") }
+                }
+            } label: {
+                Image(systemName: "ellipsis").font(.system(size: ClaudeTheme.size(12)))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
     }
 
+    private func iconButton(_ systemName: String, help: String, tint: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                .foregroundStyle(tint)
+                .frame(width: 20, height: 20)
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
     @ViewBuilder
     private var content: some View {
-        if worktreePath == nil {
+        if showComments, let prModel {
+            PRCommentsView(comments: prModel.comments)
+        } else if worktreePath == nil {
             placeholder("Select a workspace to see its changes")
         } else if files.isEmpty {
             placeholder(loading ? "Loading…" : "Working tree clean")
-        } else {
-            List(files) { file in
-                Button { open(file) } label: {
-                    HStack(spacing: 8) {
-                        Text(badge(file.status))
-                            .font(.system(size: ClaudeTheme.size(10), weight: .bold, design: .monospaced))
-                            .foregroundStyle(color(file.status))
-                            .frame(width: 16, alignment: .leading)
-                        Text(file.name)
-                            .font(.system(size: ClaudeTheme.size(12)))
-                            .lineLimit(1)
-                        Spacer()
-                        if !file.folder.isEmpty {
-                            Text(file.folder)
-                                .font(.system(size: ClaudeTheme.size(10)))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                        }
+        } else if groupByFolder {
+            List {
+                ForEach(groupedFiles, id: \.folder) { group in
+                    Section(group.label) {
+                        ForEach(group.files) { fileRow($0) }
                     }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
             }
-            .listStyle(.plain)
+            .listStyle(.sidebar)
+        } else {
+            List(files) { fileRow($0) }
+                .listStyle(.plain)
         }
+    }
+
+    private func fileRow(_ file: ChangedFile) -> some View {
+        Button { open(file) } label: {
+            HStack(spacing: 8) {
+                Text(badge(file.status))
+                    .font(.system(size: ClaudeTheme.size(10), weight: .bold, design: .monospaced))
+                    .foregroundStyle(color(file.status))
+                    .frame(width: 16, alignment: .leading)
+                Text(file.name)
+                    .font(.system(size: ClaudeTheme.size(12)))
+                    .lineLimit(1)
+                Spacer()
+                if !groupByFolder, !file.folder.isEmpty {
+                    Text(file.folder)
+                        .font(.system(size: ClaudeTheme.size(10)))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private struct FileGroup: Identifiable { let folder: String; let files: [ChangedFile]; var id: String { folder }; var label: String { folder.isEmpty ? "." : folder } }
+
+    private var groupedFiles: [FileGroup] {
+        Dictionary(grouping: files, by: \.folder)
+            .sorted { $0.key < $1.key }
+            .map { FileGroup(folder: $0.key, files: $0.value) }
     }
 
     private func placeholder(_ text: String) -> some View {

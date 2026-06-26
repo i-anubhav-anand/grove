@@ -7,7 +7,6 @@ public enum InspectorTab: String, CaseIterable {
     case files = "All files"
     case changes = "Changes"
     case checks = "Checks"
-    case review = "Review"
     case memo = "Memo"
 
     public var icon: String {
@@ -15,7 +14,6 @@ public enum InspectorTab: String, CaseIterable {
         case .files: "folder"
         case .changes: "plusminus.circle"
         case .checks: "checkmark.seal"
-        case .review: "text.bubble"
         case .memo: "note.text"
         }
     }

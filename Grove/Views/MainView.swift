@@ -382,18 +382,23 @@ struct CountBadge: View {
 
 struct InspectorPanel: View {
     @Environment(WindowState.self) private var windowState
+    @Environment(AppState.self) private var appState
     @State private var memoClearID: UUID? = nil
     @State private var memoFocusID: UUID? = nil
     @State private var fileSearchTrigger = false
     @State private var changedFileCount = 0
+    @State private var prModel = PRReviewModel()
     @AppStorage("inspectorTerminalDockHeight") private var terminalDockHeight: Double = 260
 
     private func bumpFocus(for tab: InspectorTab) {
         switch tab {
         case .memo: memoFocusID = UUID()
-        case .files, .changes, .checks, .review: break
+        case .files, .changes, .checks: break
         }
     }
+
+    private var repoFullName: String? { windowState.selectedProject?.gitHubRepo }
+    private var prBranch: String? { windowState.selectedWorkspace?.branch }
 
     /// Working directory for the right-panel tabs: the selected workspace's
     /// worktree, falling back to the project root. The workspace is only honored
@@ -409,6 +414,11 @@ struct InspectorPanel: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if let pr = prModel.pullRequest {
+                PRMergeHeader(pr: pr, model: prModel)
+                ClaudeThemeDivider()
+            }
+
             HStack(spacing: 8) {
                 InspectorTabControl(
                     selection: Bindable(windowState).inspectorTab,
@@ -449,7 +459,7 @@ struct InspectorPanel: View {
             .frame(maxHeight: windowState.inspectorTab == .files ? .infinity : 0)
             .clipped()
 
-            ChangesPaneView(worktreePath: workspaceCwd)
+            ChangesPaneView(worktreePath: workspaceCwd, prModel: prModel)
                 .frame(maxHeight: windowState.inspectorTab == .changes ? .infinity : 0)
                 .clipped()
 
@@ -459,10 +469,6 @@ struct InspectorPanel: View {
             )
             .frame(maxHeight: windowState.inspectorTab == .checks ? .infinity : 0)
             .clipped()
-
-            ReviewPaneView()
-                .frame(maxHeight: windowState.inspectorTab == .review ? .infinity : 0)
-                .clipped()
 
             InspectorMemoPanel(projectId: windowState.selectedProject?.id,
                                clearTrigger: memoClearID,
@@ -492,6 +498,9 @@ struct InspectorPanel: View {
             let output = await ChangesPaneView.runGitStatus(cwd: cwd)
             changedFileCount = output.split(separator: "\n").filter { $0.count > 3 }.count
         }
+        .task(id: "\(repoFullName ?? "")|\(prBranch ?? "")") {
+            await prModel.reload(github: appState.github, repo: repoFullName, branch: prBranch, loggedIn: appState.isLoggedIn)
+        }
     }
 }
 
@@ -507,6 +516,63 @@ private struct InspectorIconButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+// MARK: - PR Merge Header
+
+/// Slim "Ready to merge" strip shown above the inspector tabs when the branch has an open PR.
+/// The Merge button opens the PR in the browser for now — there is no merge API yet (TODO).
+struct PRMergeHeader: View {
+    @Environment(\.openURL) private var openURL
+    let pr: PullRequest
+    let model: PRReviewModel
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                if let url = URL(string: pr.htmlUrl) { openURL(url) }
+            } label: {
+                HStack(spacing: 3) {
+                    Text("#\(pr.number)")
+                        .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                }
+                .foregroundStyle(ClaudeTheme.textSecondary)
+            }
+            .buttonStyle(.plain)
+            .help(pr.title)
+
+            Text(model.stateLabel)
+                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                .foregroundStyle(model.isReadyToMerge ? ClaudeTheme.statusSuccess : ClaudeTheme.textSecondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            Button {
+                // TODO: real merge via the GitHub API; opens the PR in the browser for now.
+                if let url = URL(string: pr.htmlUrl) { openURL(url) }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.merge")
+                    Text("Merge")
+                }
+                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .foregroundStyle(model.isReadyToMerge ? ClaudeTheme.statusSuccess : ClaudeTheme.textTertiary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(model.isReadyToMerge ? ClaudeTheme.statusSuccess : ClaudeTheme.borderSubtle, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .help("Open the pull request to merge")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
     }
 }
 
