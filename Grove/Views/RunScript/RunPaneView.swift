@@ -7,6 +7,10 @@ import GroveCore
 /// embedded terminal. Presented as a sheet/standalone pane. Re-running terminates
 /// the previous process and starts a fresh one; a stop button kills the current run.
 struct RunPaneView: View {
+    /// When embedded in the inspector terminal dock: drop the sheet sizing + the standalone
+    /// close button, and don't auto-run on appear (the pane stays mounted behind sub-tabs).
+    var embedded: Bool = false
+
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(\.dismiss) private var dismiss
@@ -58,12 +62,12 @@ struct RunPaneView: View {
                 idlePlaceholder
             }
         }
-        .frame(minWidth: 700, idealWidth: 820, minHeight: 480, idealHeight: 620)
+        .runPaneFrame(embedded: embedded)
         .background(ClaudeTheme.surfaceElevated)
         .onAppear {
             scriptDraft = script ?? ""
-            // Auto-run once when opened with a script already configured.
-            if script != nil { run() }
+            // Auto-run once when opened with a script already configured (sheet mode only).
+            if script != nil, !embedded { run() }
         }
         .onDisappear { process.terminate() }
     }
@@ -127,15 +131,17 @@ struct RunPaneView: View {
             .disabled(script == nil || cwd == nil)
             .help("Run (⌘R)")
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .frame(width: 20, height: 20)
+            if !embedded {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("w", modifiers: .command)
             }
-            .buttonStyle(.plain)
-            .keyboardShortcut("w", modifiers: .command)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -230,5 +236,17 @@ struct RunPaneView: View {
     private func stop() {
         process.terminate()
         isRunning = false
+    }
+}
+
+private extension View {
+    /// Sheet sizing for standalone presentation; flexible fill when embedded in the dock.
+    @ViewBuilder
+    func runPaneFrame(embedded: Bool) -> some View {
+        if embedded {
+            self.frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            self.frame(minWidth: 700, idealWidth: 820, minHeight: 480, idealHeight: 620)
+        }
     }
 }

@@ -382,17 +382,14 @@ struct CountBadge: View {
 
 struct InspectorPanel: View {
     @Environment(WindowState.self) private var windowState
-    @State private var inspectorProcess = TerminalProcess()
-    @State private var terminalResetID = UUID()
     @State private var memoClearID: UUID? = nil
-    @State private var terminalFocusID: UUID? = nil
     @State private var memoFocusID: UUID? = nil
     @State private var fileSearchTrigger = false
     @State private var changedFileCount = 0
+    @AppStorage("inspectorTerminalDockHeight") private var terminalDockHeight: Double = 260
 
     private func bumpFocus(for tab: InspectorTab) {
         switch tab {
-        case .terminal: terminalFocusID = UUID()
         case .memo: memoFocusID = UUID()
         case .files, .changes, .checks, .review: break
         }
@@ -421,13 +418,7 @@ struct InspectorPanel: View {
 
                 Spacer()
 
-                if windowState.inspectorTab == .terminal {
-                    InspectorIconButton(help: "Reset Terminal") {
-                        inspectorProcess.terminate()
-                        inspectorProcess = TerminalProcess()
-                        terminalResetID = UUID()
-                    }
-                } else if windowState.inspectorTab == .memo {
+                if windowState.inspectorTab == .memo {
                     InspectorIconButton(help: "Clear Memo") {
                         memoClearID = UUID()
                     }
@@ -462,19 +453,6 @@ struct InspectorPanel: View {
                 .frame(maxHeight: windowState.inspectorTab == .changes ? .infinity : 0)
                 .clipped()
 
-            EmbeddedTerminalView(
-                executable: "/bin/zsh",
-                arguments: ["-il"],
-                currentDirectory: workspaceCwd,
-                process: inspectorProcess,
-                focusTrigger: terminalFocusID
-            )
-            .id(terminalResetID)
-            .padding(8)
-            .background(ClaudeTheme.codeBackground)
-            .frame(maxHeight: windowState.inspectorTab == .terminal ? .infinity : 0)
-            .clipped()
-
             ChecksPaneView(
                 worktreePath: windowState.selectedWorkspace?.worktreePath,
                 branch: windowState.selectedWorkspace?.branch
@@ -491,6 +469,13 @@ struct InspectorPanel: View {
                                focusTrigger: memoFocusID)
                 .frame(maxHeight: windowState.inspectorTab == .memo ? .infinity : 0)
                 .clipped()
+
+            InspectorTerminalDock(
+                cwd: workspaceCwd,
+                isOpen: Bindable(windowState).terminalDockOpen,
+                tab: Bindable(windowState).terminalDockTab,
+                bodyHeight: $terminalDockHeight
+            )
         }
         .background(ClaudeTheme.surfaceElevated)
         .clipped()
@@ -522,6 +507,172 @@ private struct InspectorIconButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+// MARK: - Inspector Terminal Dock
+
+/// Docked lower section of the inspector hosting Setup / Run / Terminal. Collapsible (chevron / ×) and
+/// resizable (top drag handle). All three sub-panes stay mounted and are height-gated, so the terminal
+/// session survives sub-tab switches and collapse.
+struct InspectorTerminalDock: View {
+    let cwd: String?
+    @Binding var isOpen: Bool
+    @Binding var tab: TerminalDockTab
+    @Binding var bodyHeight: Double
+
+    @State private var process = TerminalProcess()
+    @State private var resetID = UUID()
+    @State private var focusID: UUID? = nil
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if isOpen { resizeHandle } else { ClaudeThemeDivider() }
+            header
+            if isOpen { ClaudeThemeDivider() }
+            content
+                .frame(height: isOpen ? CGFloat(bodyHeight) : 0)
+                .clipped()
+        }
+        .background(ClaudeTheme.surfaceElevated)
+        .onChange(of: tab) { _, newTab in
+            if newTab == .terminal { focusID = UUID() }
+        }
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isOpen.toggle() }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .rotationEffect(.degrees(isOpen ? 0 : -90))
+                    .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .help(isOpen ? "Collapse" : "Expand")
+
+            ForEach(TerminalDockTab.allCases, id: \.self) { t in
+                Button {
+                    tab = t
+                    if !isOpen { withAnimation(.easeInOut(duration: 0.15)) { isOpen = true } }
+                    if t == .terminal { focusID = UUID() }
+                } label: {
+                    Text(LocalizedStringKey(t.rawValue))
+                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .foregroundStyle(tab == t ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+                        .padding(.vertical, 6)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(tab == t ? ClaudeTheme.accent : Color.clear)
+                                .frame(height: 1.5)
+                        }
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer(minLength: 8)
+
+            if tab == .terminal {
+                InspectorIconButton(help: "Reset Terminal") { resetTerminal() }
+            }
+
+            Button {
+                tab = .terminal
+                if !isOpen { isOpen = true }
+                resetTerminal()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .help("New Terminal")
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isOpen = false }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                    .frame(width: 20, height: 20)
+            }
+            .buttonStyle(.plain)
+            .help("Close")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+    }
+
+    // MARK: Content (all sub-panes mounted; height-gated to preserve the terminal session)
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            setupPane
+                .frame(maxHeight: tab == .setup ? .infinity : 0)
+                .clipped()
+
+            RunPaneView(embedded: true)
+                .frame(maxHeight: tab == .run ? .infinity : 0)
+                .clipped()
+
+            EmbeddedTerminalView(
+                executable: "/bin/zsh",
+                arguments: ["-il"],
+                currentDirectory: cwd,
+                process: process,
+                focusTrigger: focusID
+            )
+            .id(resetID)
+            .padding(8)
+            .background(ClaudeTheme.codeBackground)
+            .frame(maxHeight: tab == .terminal ? .infinity : 0)
+            .clipped()
+        }
+    }
+
+    private var setupPane: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "gearshape")
+                .font(.system(size: ClaudeTheme.size(22)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            // TODO: wire a per-project setup script once that concept exists (mirror RunPaneView).
+            Text("No setup script configured")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ClaudeTheme.codeBackground)
+    }
+
+    private var resizeHandle: some View {
+        Rectangle()
+            .fill(ClaudeTheme.border)
+            .frame(height: 1)
+            .overlay(Color.clear.frame(height: 6).contentShape(Rectangle()))
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        bodyHeight = max(120, min(600, bodyHeight - Double(value.translation.height)))
+                    }
+            )
+            .onHover { inside in
+                if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+            }
+    }
+
+    private func resetTerminal() {
+        process.terminate()
+        process = TerminalProcess()
+        resetID = UUID()
+        focusID = UUID()
     }
 }
 

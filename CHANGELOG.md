@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Inspector tab bar** no longer wraps or overlaps at narrow widths — labels are single-line and the
   bar scrolls horizontally when cramped. The "Files" tab is now labelled **"All files"**, "Changes"
   shows a live changed-file count badge, and the inspector's minimum width is raised to 280pt.
+- **Terminal moved to a docked lower section** of the inspector with **Setup · Run · Terminal**
+  sub-tabs, a collapse chevron, a resize handle, and `+` / reset controls — removing the Terminal tab
+  from the top bar. The terminal session now survives sub-tab switches and collapse.
 
 ## [0.5.0] - 2026-06-25
 

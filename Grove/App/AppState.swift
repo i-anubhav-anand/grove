@@ -891,10 +891,11 @@ final class AppState {
     }
 
     func openTerminal(in window: WindowState) async {
-        if window.showInspector && window.inspectorTab == .terminal {
-            window.showInspector = false
+        if window.terminalDockOpen && window.terminalDockTab == .terminal {
+            window.terminalDockOpen = false
         } else {
-            window.inspectorTab = .terminal
+            window.terminalDockTab = .terminal
+            window.terminalDockOpen = true
             window.showInspector = true
         }
     }

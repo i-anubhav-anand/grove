@@ -7,7 +7,6 @@ public enum InspectorTab: String, CaseIterable {
     case files = "All files"
     case changes = "Changes"
     case checks = "Checks"
-    case terminal = "Terminal"
     case review = "Review"
     case memo = "Memo"
 
@@ -15,12 +14,20 @@ public enum InspectorTab: String, CaseIterable {
         switch self {
         case .files: "folder"
         case .changes: "plusminus.circle"
-        case .terminal: "apple.terminal"
         case .checks: "checkmark.seal"
         case .review: "text.bubble"
         case .memo: "note.text"
         }
     }
+}
+
+// MARK: - TerminalDockTab
+
+/// Sub-tabs for the inspector's docked lower section (Terminal lives here, not in the top bar).
+public enum TerminalDockTab: String, CaseIterable {
+    case setup = "Setup"
+    case run = "Run"
+    case terminal = "Terminal"
 }
 
 // MARK: - QueuedMessage
@@ -96,6 +103,9 @@ public final class WindowState {
     public var interactiveTerminal: InteractiveTerminalState?
     public var showInspector: Bool = true
     public var inspectorTab: InspectorTab = .files
+    /// Lower terminal dock (Setup/Run/Terminal). Per-window; opens by default so it's discoverable.
+    public var terminalDockOpen: Bool = true
+    public var terminalDockTab: TerminalDockTab = .terminal
     public var inspectorFile: PreviewFile?
     public var diffFile: PreviewFile?
     public var showMarketplace = false
