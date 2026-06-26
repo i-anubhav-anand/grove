@@ -123,7 +123,7 @@ struct ChangesPaneView: View {
         loading = false
     }
 
-    private static func runGitStatus(cwd: String) async -> String {
+    static func runGitStatus(cwd: String) async -> String {
         await Task.detached {
             let proc = Process()
             let pipe = Pipe()

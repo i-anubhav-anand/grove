@@ -5,6 +5,14 @@ All notable changes to **Grove** are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Inspector tab bar** no longer wraps or overlaps at narrow widths — labels are single-line and the
+  bar scrolls horizontally when cramped. The "Files" tab is now labelled **"All files"**, "Changes"
+  shows a live changed-file count badge, and the inspector's minimum width is raised to 280pt.
+
 ## [0.5.0] - 2026-06-25
 
 > Cockpit refinement release — per-session worktree isolation, a unified

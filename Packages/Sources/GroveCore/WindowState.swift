@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - InspectorTab
 
 public enum InspectorTab: String, CaseIterable {
-    case files = "Files"
+    case files = "All files"
     case changes = "Changes"
     case checks = "Checks"
     case terminal = "Terminal"

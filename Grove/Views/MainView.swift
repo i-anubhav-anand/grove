@@ -136,7 +136,7 @@ struct MainView: View {
                         DragGesture(minimumDistance: 1)
                             .onChanged { value in
                                 let newWidth = inspectorWidth - value.translation.width
-                                inspectorWidth = max(200, min(800, newWidth))
+                                inspectorWidth = max(280, min(800, newWidth))
                             }
                     )
                     .onHover { inside in
@@ -317,30 +317,64 @@ struct DetailToolbar: View {
 
 struct InspectorTabControl: View {
     @Binding var selection: InspectorTab
+    /// Optional per-tab counts. A tab with an entry shows a `CountBadge`; absent tabs show no badge.
+    var counts: [InspectorTab: Int] = [:]
     var onTabClick: (InspectorTab) -> Void = { _ in }
 
     var body: some View {
-        HStack(spacing: 2) {
-            ForEach(InspectorTab.allCases, id: \.self) { tab in
-                Button {
-                    selection = tab
-                    onTabClick(tab)
-                } label: {
-                    Text(LocalizedStringKey(tab.rawValue))
-                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                        .padding(.horizontal, 8)
+        // Horizontal scroll is the narrow-width fallback: labels never wrap (lineLimit + fixedSize),
+        // the bar scrolls instead of compressing. The track background hugs the content so the pill
+        // stays tight even when the ScrollView is given extra width.
+        ScrollView(.horizontal) {
+            HStack(spacing: 2) {
+                ForEach(InspectorTab.allCases, id: \.self) { tab in
+                    let isSelected = selection == tab
+                    Button {
+                        selection = tab
+                        onTabClick(tab)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text(LocalizedStringKey(tab.rawValue))
+                                .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                            if let count = counts[tab] {
+                                CountBadge(count: count, isSelected: isSelected)
+                            }
+                        }
+                        .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .contentShape(Rectangle())
-                        .foregroundStyle(selection == tab ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
+                        .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
                         .background(
-                            selection == tab ? ClaudeTheme.accent : Color.clear,
+                            isSelected ? ClaudeTheme.accent : Color.clear,
                             in: RoundedRectangle(cornerRadius: 6)
                         )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
+            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         }
-        .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
+        .scrollIndicators(.hidden)
+    }
+}
+
+/// Small count pill shown inline after a tab label (e.g. "Changes 3"). Adapts to the selected pill.
+struct CountBadge: View {
+    let count: Int
+    var isSelected: Bool = false
+
+    var body: some View {
+        Text("\(count)")
+            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+            .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textTertiary)
+            .padding(.horizontal, 5)
+            .frame(minWidth: 16)
+            .background(
+                isSelected ? ClaudeTheme.textOnAccent.opacity(0.2) : ClaudeTheme.surfaceTertiary,
+                in: Capsule()
+            )
     }
 }
 
@@ -354,6 +388,7 @@ struct InspectorPanel: View {
     @State private var terminalFocusID: UUID? = nil
     @State private var memoFocusID: UUID? = nil
     @State private var fileSearchTrigger = false
+    @State private var changedFileCount = 0
 
     private func bumpFocus(for tab: InspectorTab) {
         switch tab {
@@ -380,6 +415,7 @@ struct InspectorPanel: View {
             HStack(spacing: 8) {
                 InspectorTabControl(
                     selection: Bindable(windowState).inspectorTab,
+                    counts: [.changes: changedFileCount],
                     onTabClick: { tab in bumpFocus(for: tab) }
                 )
 
@@ -463,6 +499,13 @@ struct InspectorPanel: View {
         }
         .onChange(of: windowState.showInspector) { _, isShowing in
             if isShowing { bumpFocus(for: windowState.inspectorTab) }
+        }
+        .task(id: workspaceCwd) {
+            // Drives the "Changes" tab badge. Reuses ChangesPaneView's git-status helper rather than
+            // duplicating the plumbing; counts porcelain lines the same way the pane does.
+            guard let cwd = workspaceCwd else { changedFileCount = 0; return }
+            let output = await ChangesPaneView.runGitStatus(cwd: cwd)
+            changedFileCount = output.split(separator: "\n").filter { $0.count > 3 }.count
         }
     }
 }
