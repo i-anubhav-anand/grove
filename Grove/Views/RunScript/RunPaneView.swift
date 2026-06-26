@@ -186,7 +186,7 @@ struct RunPaneView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Color(NSColor.separatorColor), lineWidth: 1)
+                        .strokeBorder(ClaudeTheme.borderSubtle, lineWidth: 1)
                 )
 
             HStack {

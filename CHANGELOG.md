@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **All files · Changes · Checks · Memo**. When the branch has an open PR, a **"Ready to merge"**
   header (PR number, mergeable state, Merge button) appears above the tabs, and the Changes header gains
   **eye** (review comments), **tree** (flat ⇄ folder grouping), and overflow (Refresh / Open PR) actions.
+- **Consistent inspector chrome.** Icon buttons across the inspector (tab actions, terminal dock,
+  Changes header) share one `InspectorIconButton` with a uniform size and hover affordance; a stray
+  literal border colour now routes through the theme.
 
 ## [0.5.0] - 2026-06-25
 

@@ -42,17 +42,16 @@ struct ChangesPaneView: View {
 
             // Review comments (eye) — only when the branch has an open PR.
             if prModel?.pullRequest != nil {
-                iconButton(showComments ? "eye.fill" : "eye",
-                           help: "Review comments",
-                           tint: showComments ? ClaudeTheme.accent : ClaudeTheme.textSecondary) {
+                InspectorIconButton(systemName: showComments ? "eye.fill" : "eye",
+                                    help: "Review comments",
+                                    tint: showComments ? ClaudeTheme.accent : nil) {
                     showComments.toggle()
                 }
             }
 
             // Flat list ⇄ folder grouping.
-            iconButton(groupByFolder ? "list.bullet.indent" : "list.bullet",
-                       help: groupByFolder ? "Flat list" : "Group by folder",
-                       tint: ClaudeTheme.textSecondary) {
+            InspectorIconButton(systemName: groupByFolder ? "list.bullet.indent" : "list.bullet",
+                                help: groupByFolder ? "Flat list" : "Group by folder") {
                 groupByFolder.toggle()
             }
 
@@ -72,17 +71,6 @@ struct ChangesPaneView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-    }
-
-    private func iconButton(_ systemName: String, help: String, tint: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                .foregroundStyle(tint)
-                .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 
     @ViewBuilder

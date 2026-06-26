@@ -14,6 +14,7 @@ struct MainView: View {
     @State private var fileSearchTrigger = false
     @State private var inspectorStarted = true
     @AppStorage("inspectorPanelWidth") private var inspectorWidth: Double = 400
+    @State private var resizeBaseWidth: Double? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showCommandPalette = false
 
@@ -33,6 +34,10 @@ struct MainView: View {
         if !appState.onboardingCompleted {
             OnboardingView()
         } else {
+            GeometryReader { geo in
+            // Inspector floor = the default width (never shrink below it); ceiling = 25% of the
+            // window so the chat keeps ≥75%. On narrow windows where 25% < default, the default wins.
+            let maxInspector = max(400, geo.size.width * 0.25)
             HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -135,18 +140,24 @@ struct MainView: View {
                     .gesture(
                         DragGesture(minimumDistance: 1)
                             .onChanged { value in
-                                let newWidth = inspectorWidth - value.translation.width
-                                inspectorWidth = max(280, min(800, newWidth))
+                                // Anchor to the width at drag start so movement tracks the cursor 1:1.
+                                // (Reading + writing inspectorWidth with absolute translation made it accelerate.)
+                                let base = resizeBaseWidth ?? inspectorWidth
+                                if resizeBaseWidth == nil { resizeBaseWidth = base }
+                                inspectorWidth = min(max(base - value.translation.width, 400), maxInspector)
                             }
+                            .onEnded { _ in resizeBaseWidth = nil }
                     )
                     .onHover { inside in
                         if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
                     }
 
                 InspectorPanel()
-                    .frame(width: CGFloat(inspectorWidth))
+                    .frame(width: min(max(CGFloat(inspectorWidth), 400), maxInspector))
+                    .id(appState.themeRevision)
             }
             } // HStack
+            } // GeometryReader
         }
     }
 
@@ -429,7 +440,7 @@ struct InspectorPanel: View {
                 Spacer()
 
                 if windowState.inspectorTab == .memo {
-                    InspectorIconButton(help: "Clear Memo") {
+                    InspectorIconButton(systemName: "arrow.counterclockwise", help: "Clear Memo") {
                         memoClearID = UUID()
                     }
                 }
@@ -501,21 +512,6 @@ struct InspectorPanel: View {
         .task(id: "\(repoFullName ?? "")|\(prBranch ?? "")") {
             await prModel.reload(github: appState.github, repo: repoFullName, branch: prBranch, loggedIn: appState.isLoggedIn)
         }
-    }
-}
-
-private struct InspectorIconButton: View {
-    let help: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "arrow.counterclockwise")
-                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help(help)
     }
 }
 
@@ -646,30 +642,18 @@ struct InspectorTerminalDock: View {
             Spacer(minLength: 8)
 
             if tab == .terminal {
-                InspectorIconButton(help: "Reset Terminal") { resetTerminal() }
+                InspectorIconButton(systemName: "arrow.counterclockwise", help: "Reset Terminal") { resetTerminal() }
             }
 
-            Button {
+            InspectorIconButton(systemName: "plus", help: "New Terminal") {
                 tab = .terminal
                 if !isOpen { isOpen = true }
                 resetTerminal()
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.plain)
-            .help("New Terminal")
 
-            Button {
+            InspectorIconButton(systemName: "xmark", help: "Close") {
                 withAnimation(.easeInOut(duration: 0.15)) { isOpen = false }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                    .frame(width: 20, height: 20)
             }
-            .buttonStyle(.plain)
-            .help("Close")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
