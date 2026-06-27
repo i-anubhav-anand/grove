@@ -7,6 +7,7 @@ struct ToolResultView: View {
     @State private var isExpanded: Bool
     @State private var isDiffExpanded = false
     @State private var outputExpanded = false
+    @State private var isRowHovered = false
     @Environment(WindowState.self) private var windowState
 
     /// Lowercased tool name (avoids repeated lowercased() calls)
@@ -73,10 +74,12 @@ struct ToolResultView: View {
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.caption2)
                             .foregroundStyle(ClaudeTheme.textTertiary)
+                            .opacity(isRowHovered || isExpanded ? 1 : 0)
                     }
                 }
                 .padding(.vertical, 2)
                 .contentShape(Rectangle())
+                .onHover { isRowHovered = $0 }
             }
             .buttonStyle(.plain)
 
