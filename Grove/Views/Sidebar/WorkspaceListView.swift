@@ -18,25 +18,29 @@ struct WorkspaceListView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         ForEach(visibleProjects) { project in
-                            VStack(alignment: .leading, spacing: 6) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 projectHeader(project)
 
-                                ForEach(sessions(for: project.id)) { summary in
-                                    let workspace = summary.workspaceId.flatMap { wid in
-                                        appState.workspaces.first { $0.id == wid }
+                                // Sessions nest under the project as sub-items.
+                                VStack(alignment: .leading, spacing: 8) {
+                                    ForEach(sessions(for: project.id)) { summary in
+                                        let workspace = summary.workspaceId.flatMap { wid in
+                                            appState.workspaces.first { $0.id == wid }
+                                        }
+                                        SessionCardRow(
+                                            summary: summary,
+                                            workspace: workspace,
+                                            isCurrent: appState.currentSession(in: windowState)?.id == summary.id,
+                                            isStreaming: appState.isStreaming(summary.id),
+                                            prState: workspace.flatMap { appState.workspacePRStates[$0.id] },
+                                            diffStat: workspace.flatMap { appState.workspaceDiffStats[$0.id] },
+                                            onTap: { appState.selectSession(id: summary.id, in: windowState) },
+                                            onArchive: { ws in archive(ws) },
+                                            onDelete: { pendingDeleteSession = summary }
+                                        )
                                     }
-                                    SessionCardRow(
-                                        summary: summary,
-                                        workspace: workspace,
-                                        isCurrent: appState.currentSession(in: windowState)?.id == summary.id,
-                                        isStreaming: appState.isStreaming(summary.id),
-                                        prState: workspace.flatMap { appState.workspacePRStates[$0.id] },
-                                        diffStat: workspace.flatMap { appState.workspaceDiffStats[$0.id] },
-                                        onTap: { appState.selectSession(id: summary.id, in: windowState) },
-                                        onArchive: { ws in archive(ws) },
-                                        onDelete: { pendingDeleteSession = summary }
-                                    )
                                 }
+                                .padding(.leading, 10)
                             }
                             .padding(.horizontal, 10)
                         }
@@ -90,26 +94,35 @@ struct WorkspaceListView: View {
     // MARK: - Header
 
     private func projectHeader(_ project: Project) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             Image(systemName: "folder.fill")
-                .font(.system(size: ClaudeTheme.size(11)))
-                .foregroundStyle(ClaudeTheme.accent.opacity(0.8))
+                .font(.system(size: ClaudeTheme.size(15)))
+                .foregroundStyle(ClaudeTheme.accent)
             Text(project.name)
-                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
+                .font(.system(size: ClaudeTheme.size(16), weight: .bold))
                 .foregroundStyle(ClaudeTheme.textPrimary)
                 .lineLimit(1)
+            let count = sessions(for: project.id).count
+            if count > 0 {
+                Text("\(count)")
+                    .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(ClaudeTheme.surfaceSecondary, in: Capsule())
+            }
             Spacer()
             Button {
                 creatingForProject = project
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: ClaudeTheme.size(11)))
+                    .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textSecondary)
             }
             .buttonStyle(.borderless)
             .help("New session")
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
         .contextMenu {
             Button(role: .destructive) {
                 pendingDeleteProject = project
