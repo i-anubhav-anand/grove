@@ -21,6 +21,11 @@ struct ChatMarker: View {
                 ProgressView()
                     .controlSize(.mini)
                     .tint(ClaudeTheme.textTertiary)
+            } else if expandable && isHovered {
+                // On hover, the leading icon becomes the expand/collapse affordance.
+                Image(systemName: isExpanded ? "minus" : "plus")
+                    .font(.system(size: ClaudeTheme.messageSize(10), weight: .semibold))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
             } else if let icon {
                 Image(systemName: icon)
                     .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
@@ -46,14 +51,6 @@ struct ChatMarker: View {
             }
 
             Spacer(minLength: 4)
-
-            // Expand/collapse affordance only appears on hover.
-            if expandable && isHovered {
-                Image(systemName: isExpanded ? "minus" : "plus")
-                    .font(.system(size: ClaudeTheme.messageSize(9), weight: .semibold))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .transition(.opacity)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 3)
