@@ -92,9 +92,11 @@ struct ChangesPaneView: View {
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
         } else {
             List(files) { fileRow($0) }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
         }
     }
 

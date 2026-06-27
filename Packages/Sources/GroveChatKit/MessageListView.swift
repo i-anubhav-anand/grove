@@ -37,7 +37,10 @@ struct MessageListView: View {
             // Streaming view is outside VStack — text deltas don't affect settled layout
             VStack(spacing: 16) {
                 if !windowState.focusMode {
-                    StreamingMessageView {
+                    StreamingMessageView(onContentGrew: {
+                        // Follow the answer as it streams, but only while pinned.
+                        if isNearBottom { scrollToBottomDebounced() }
+                    }) {
                         rebuildSettledItems()
                         if isNearBottom { scrollToBottomDebounced() }
                     }
@@ -292,7 +295,15 @@ private func streamingBoundaryIndex(in messages: [ChatMessage]) -> Int {
 struct StreamingMessageView: View {
     @Environment(ChatBridge.self) private var chatBridge
     @Environment(WindowState.self) private var windowState
+    var onContentGrew: () -> Void = {}
     var onStructureChanged: () -> Void
+
+    /// Cheap proxy for "the streaming answer grew" — its text length plus block
+    /// count. Drives scroll-follow without rebuilding the settled list per token.
+    private var streamingContentLength: Int {
+        guard let last = chatBridge.messages.last, last.isStreaming else { return 0 }
+        return last.content.count + last.blocks.count
+    }
 
     var body: some View {
         let messages = chatBridge.messages
@@ -314,6 +325,9 @@ struct StreamingMessageView: View {
         }
         .onChange(of: messages.count) { _, _ in
             onStructureChanged()
+        }
+        .onChange(of: streamingContentLength) { _, _ in
+            onContentGrew()
         }
     }
 

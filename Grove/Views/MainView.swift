@@ -493,7 +493,7 @@ struct InspectorPanel: View {
                 bodyHeight: $terminalDockHeight
             )
         }
-        .background(ClaudeTheme.surfaceElevated)
+        .background(ClaudeTheme.background)
         .clipped()
         .onChange(of: windowState.inspectorTab) { _, newTab in
             bumpFocus(for: newTab)
