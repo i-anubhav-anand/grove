@@ -207,7 +207,7 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
             isFocused: $isInputFocused,
             hasMarkedText: $inputHasMarkedText,
             focusTrigger: inputFocusTrigger,
-            font: .systemFont(ofSize: ClaudeTheme.size(14)),
+            font: .systemFont(ofSize: ClaudeTheme.size(16)),
             textColor: NSColor(ClaudeTheme.textPrimary),
             placeholder: String(localized: "Add a follow up", bundle: .module),
             onReturn: handleReturnKey,
@@ -743,7 +743,7 @@ private struct InputHeightMeasurer: View {
     var body: some View {
         GeometryReader { geo in
             Text(measuringText)
-                .font(.system(size: ClaudeTheme.size(14)))
+                .font(.system(size: ClaudeTheme.size(16)))
                 .frame(width: geo.size.width, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .background(heightReporter)
