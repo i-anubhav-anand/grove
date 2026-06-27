@@ -46,6 +46,7 @@ struct WorkspaceListView: View {
                                             prState: workspace.flatMap { appState.workspacePRStates[$0.id] },
                                             pr: workspace.flatMap { appState.workspacePRs[$0.id] },
                                             diffStat: workspace.flatMap { appState.workspaceDiffStats[$0.id] },
+                                            commitsAhead: workspace.flatMap { appState.workspaceCommitsAhead[$0.id] } ?? 0,
                                             onTap: { appState.selectSession(id: summary.id, in: windowState) },
                                             onArchive: { ws in archive(ws) },
                                             onDelete: { pendingDeleteSession = summary }
@@ -300,6 +301,7 @@ private struct SessionCardRow: View {
     let prState: BranchPRState?
     let pr: BranchPR?
     let diffStat: DiffStat?
+    let commitsAhead: Int
     let onTap: () -> Void
     let onArchive: (Workspace) -> Void
     let onDelete: () -> Void
@@ -441,6 +443,7 @@ private struct SessionCardRow: View {
         case prOpen         // PR raised
         case merged         // PR merged
         case closed         // PR closed without merge
+        case committed      // local commits ahead, no PR yet
         case inProgress
         case inReview
         case done
@@ -452,6 +455,7 @@ private struct SessionCardRow: View {
             case .prOpen:     return "arrow.triangle.pull"  // PR raised
             case .merged:     return "checkmark.seal.fill"  // PR merged
             case .closed:     return "xmark.circle.fill"
+            case .committed:  return "checkmark.circle"     // committed, not pushed/PR'd
             case .inProgress: return "bolt.fill"
             case .inReview:   return "eye.fill"
             case .done:       return "checkmark.circle.fill"
@@ -465,6 +469,7 @@ private struct SessionCardRow: View {
             case .prOpen:     return "PR open"
             case .merged:     return "Merged"
             case .closed:     return "Closed"
+            case .committed:  return "Committed"
             case .inProgress: return "In Progress"
             case .inReview:   return "In Review"
             case .done:       return "Done"
@@ -478,6 +483,7 @@ private struct SessionCardRow: View {
             case .prOpen:     return ClaudeTheme.statusSuccess
             case .merged:     return Color(red: 0.54, green: 0.34, blue: 0.90)
             case .closed:     return ClaudeTheme.statusError
+            case .committed:  return .teal
             case .inProgress: return .blue
             case .inReview:   return .orange
             case .done:       return ClaudeTheme.statusSuccess
@@ -493,6 +499,8 @@ private struct SessionCardRow: View {
         case .merged: return .merged
         case .closed: return .closed
         case nil:
+            // No PR — surface committed-but-not-pushed work, else board status.
+            if commitsAhead > 0 { return .committed }
             switch workspace?.status {
             case .inProgress: return .inProgress
             case .inReview:   return .inReview

@@ -88,6 +88,7 @@ final class AppState {
 
     /// Cached +/- line stats per workspace id.
     var workspaceDiffStats: [UUID: DiffStat] = [:]
+    var workspaceCommitsAhead: [UUID: Int] = [:]
 
     /// Cached GitHub PR state per workspace id (open/merged/closed), used to color
     /// the sidebar branch icon. Only populated when signed in and the project is
@@ -1392,6 +1393,11 @@ final class AppState {
                     )
 
                     reloadCommittedFromDisk(sessionId: resultEvent.sessionId, projectId: projectId, cwd: cwd)
+
+                    // A turn often commits / pushes / opens a PR — refresh the
+                    // sidebar's diff/commit/PR state so it isn't stale until the
+                    // app is re-activated.
+                    Task { await refreshWorkspaceStatuses() }
 
                     if !resultEvent.isError {
                         let sid = resultEvent.sessionId

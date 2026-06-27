@@ -66,6 +66,20 @@ public enum WorkspaceStatus: String, Codable, Sendable, CaseIterable {
         return diffStat(numstat: out)
     }
 
+    // MARK: - Commits ahead of base
+
+    /// Number of commits on this worktree's branch that aren't yet on the base
+    /// branch — i.e. committed-but-not-merged work. Tries the remote default
+    /// branch first, then common local base names.
+    public static func commitsAhead(atPath path: String) async -> Int {
+        for base in ["origin/HEAD", "origin/main", "main", "origin/master", "master"] {
+            let out = await runGit(["-C", path, "rev-list", "--count", "\(base)..HEAD"], cwd: path)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !out.isEmpty, let n = Int(out) { return n }
+        }
+        return 0
+    }
+
     // MARK: - git plumbing
 
     private static func runGit(_ args: [String], cwd: String) async -> String {

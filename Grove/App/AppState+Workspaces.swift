@@ -86,12 +86,15 @@ extension AppState {
     func refreshWorkspaceStatuses() async {
         var counts: [UUID: Int] = [:]
         var stats: [UUID: DiffStat] = [:]
+        var ahead: [UUID: Int] = [:]
         for ws in workspaces {
             counts[ws.id] = await WorkspaceStatus.changedFileCount(atPath: ws.worktreePath)
             stats[ws.id] = await WorkspaceStatus.diffStat(atPath: ws.worktreePath)
+            ahead[ws.id] = await WorkspaceStatus.commitsAhead(atPath: ws.worktreePath)
         }
         workspaceChangeCounts = counts
         workspaceDiffStats = stats
+        workspaceCommitsAhead = ahead
         await refreshWorkspacePRStates()
     }
 
