@@ -66,10 +66,10 @@ struct WorkspaceListView: View {
     private func projectHeader(_ project: Project) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "folder.fill")
-                .font(.system(size: ClaudeTheme.size(12)))
+                .font(.system(size: ClaudeTheme.size(13)))
                 .foregroundStyle(ClaudeTheme.accent.opacity(0.8))
             Text(project.name)
-                .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                .font(.system(size: ClaudeTheme.size(14), weight: .medium))
                 .lineLimit(1)
             Spacer()
             Button {
@@ -155,7 +155,7 @@ struct WorkspaceListView: View {
                     .help(prStateHelp(ws))
             }
             Text(summary.title)
-                .font(.system(size: ClaudeTheme.size(13), weight: isCurrent ? .medium : .regular))
+                .font(.system(size: ClaudeTheme.size(15), weight: isCurrent ? .medium : .regular))
                 .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(1)
             Spacer(minLength: 4)
@@ -173,8 +173,8 @@ struct WorkspaceListView: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
         }
-        .padding(.vertical, 5)
-        .padding(.horizontal, 6)
+        .padding(.vertical, 9)
+        .padding(.horizontal, 8)
         .contentShape(Rectangle())
         .background(isCurrent ? ClaudeTheme.accent.opacity(0.15) : .clear,
                     in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
@@ -191,7 +191,7 @@ struct WorkspaceListView: View {
                 Label("Delete session", systemImage: "trash")
             }
         }
-        .listRowInsets(EdgeInsets(top: 3, leading: 16, bottom: 3, trailing: 8))
+        .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 8))
     }
 
     private var emptyState: some View {
