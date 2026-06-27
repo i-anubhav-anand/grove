@@ -475,111 +475,55 @@ struct FileEdit: Identifiable {
     var id: String { path }
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
 
-    /// Adopted from the AI Commit component's file-status indicators.
+    /// Whether the file was newly written or edited in this turn.
     enum Status {
         case added, modified
-
-        var label: String { self == .added ? "A" : "M" }
-
-        @MainActor var color: Color {
-            self == .added ? ClaudeTheme.statusSuccess : ClaudeTheme.statusWarning
-        }
     }
 }
 
-/// Collapsible card listing the files a turn changed — adapted from the AI
-/// Commit component. Header is a summary ("N files changed" + total +/-) that
-/// toggles a file list; each row shows status (A/M) · icon · path · +adds/-dels.
+/// The files a turn changed, rendered as inline activity-marker rows.
 private struct ChangedFilesCard: View {
     let edits: [FileEdit]
     let onOpen: (FileEdit) -> Void
-    @State private var isExpanded = false
-
-    private var totalAdded: Int { edits.reduce(0) { $0 + $1.added } }
-    private var totalRemoved: Int { edits.reduce(0) { $0 + $1.removed } }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header — tap to expand/collapse the file list
-            Button {
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: ClaudeTheme.messageSize(9), weight: .semibold))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                    Text("\(edits.count) file\(edits.count == 1 ? "" : "s") changed")
-                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textSecondary)
-                    Spacer(minLength: 8)
-                    if totalAdded > 0 {
-                        Text(verbatim: "+\(totalAdded)")
-                            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
-                            .foregroundStyle(ClaudeTheme.statusSuccess)
-                    }
-                    if totalRemoved > 0 {
-                        Text(verbatim: "-\(totalRemoved)")
-                            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
-                            .foregroundStyle(ClaudeTheme.statusError)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isExpanded {
-                Rectangle()
-                    .fill(ClaudeTheme.border)
-                    .frame(height: 0.5)
-                VStack(spacing: 0) {
-                    ForEach(edits) { edit in
-                        ChangedFileRow(edit: edit) { onOpen(edit) }
-                    }
-                }
-                .padding(.vertical, 4)
+            ForEach(edits) { edit in
+                ChangedFileRow(edit: edit) { onOpen(edit) }
             }
         }
-        .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudeTheme.border, lineWidth: 0.5))
     }
 }
 
-/// One row in the changed-files list. Hover shows a diff preview popover;
-/// click opens the full diff.
+/// One changed file, rendered like the activity markers: action icon + label +
+/// a greyish filename chip + diff stats. Click opens the full diff; hover shows
+/// a quick preview.
 private struct ChangedFileRow: View {
     let edit: FileEdit
     let onOpen: () -> Void
     @State private var hovering = false
 
-    private var icon: String {
-        switch (edit.name as NSString).pathExtension.lowercased() {
-        case "swift":                                return "swift"
-        case "md", "markdown", "txt", "rtf":         return "doc.text"
-        case "json", "yml", "yaml", "toml", "plist": return "curlybraces"
-        case "sh", "bash", "zsh", "fish":            return "terminal"
-        case "png", "jpg", "jpeg", "gif", "svg", "pdf": return "photo"
-        default:                                     return "doc"
-        }
-    }
+    private var actionIcon: String { edit.status == .added ? "square.and.pencil" : "pencil" }
+    private var actionLabel: String { edit.status == .added ? "Write" : "Edit" }
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: 6) {
-                Text(edit.status.label)
-                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold, design: .monospaced))
-                    .foregroundStyle(edit.status.color)
-                    .frame(width: 12)
-                Image(systemName: icon)
-                    .font(.system(size: ClaudeTheme.messageSize(10)))
+            HStack(spacing: 5) {
+                Image(systemName: actionIcon)
+                    .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                Text(actionLabel)
+                    .font(.system(size: ClaudeTheme.messageSize(12)))
                     .foregroundStyle(ClaudeTheme.textTertiary)
                 Text(edit.name)
-                    .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
+                    .font(.system(size: ClaudeTheme.messageSize(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.9))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Spacer(minLength: 8)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 1)
+                    .background(ClaudeTheme.surfaceSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+                Spacer(minLength: 6)
                 if edit.added > 0 {
                     Text(verbatim: "+\(edit.added)")
                         .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
@@ -591,9 +535,8 @@ private struct ChangedFileRow: View {
                         .foregroundStyle(ClaudeTheme.statusError)
                 }
             }
-            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 3)
-            .background(hovering ? ClaudeTheme.surfaceSecondary.opacity(0.6) : .clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
