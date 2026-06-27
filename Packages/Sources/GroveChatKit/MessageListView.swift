@@ -405,6 +405,16 @@ func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
     }
 }
 
+/// First non-blank line of a string, trimmed and length-capped — used to show a
+/// tool error inline in its row header without expanding the row.
+func firstNonEmptyLine(_ s: String, max: Int = 80) -> String {
+    for line in s.split(separator: "\n", omittingEmptySubsequences: false) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty { return String(trimmed.prefix(max)) }
+    }
+    return ""
+}
+
 // MARK: - Plain Activity Row
 
 /// Card-free row for the activity summary list. The row is plain text with a
@@ -413,7 +423,9 @@ struct PlainActivityRow: View {
     @Environment(ChatBridge.self) private var chatBridge
     let item: ActivityItem
     var isMessageStreaming: Bool = false
-    @State private var isExpanded = false
+    // Lifted into the parent (keyed by the row's stable id) so it survives the
+    // view rebuilds that happen on every streaming token.
+    @Binding var isExpanded: Bool
     @State private var isContentExpanded = false
 
     /// The subagent run behind an Agent/Task tool call, if its steps were recorded.
@@ -474,7 +486,11 @@ struct PlainActivityRow: View {
         guard !isRunning else { return nil }
         switch item {
         case .thinking: return "brain"
-        case .toolCall(let tc): return symbol(for: tc.name.lowercased())
+        case .toolCall(let tc):
+            if tc.isError { return "xmark.circle" }
+            // Bash carries its own ">. " prompt in the label, so no leading icon.
+            if tc.name.lowercased() == "bash" { return nil }
+            return symbol(for: tc.name.lowercased())
         }
     }
 
@@ -542,9 +558,8 @@ struct PlainActivityRow: View {
             }
             if let r = result, !r.isEmpty {
                 ScrollView {
-                    Text(r)
+                    Text(colorizedOutput(r, isError: isError))
                         .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                        .foregroundStyle(isError ? ClaudeTheme.statusError : ClaudeTheme.textSecondary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -554,6 +569,34 @@ struct PlainActivityRow: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    /// Terminal-style per-line coloring for bash output, baked into one
+    /// AttributedString so selection and layout stay cheap on large output.
+    private func colorizedOutput(_ text: String, isError: Bool) -> AttributedString {
+        var result = AttributedString()
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        for (i, line) in lines.enumerated() {
+            var piece = AttributedString(String(line))
+            piece.foregroundColor = terminalLineColor(String(line), isError: isError)
+            result += piece
+            if i < lines.count - 1 { result += AttributedString("\n") }
+        }
+        return result
+    }
+
+    /// Color a single output line: errors red, git diff +/- green/red, paths
+    /// bright, everything else the usual secondary text.
+    private func terminalLineColor(_ line: String, isError: Bool) -> Color {
+        if isError { return ClaudeTheme.statusError }
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("+") { return ClaudeTheme.statusSuccess }
+        if trimmed.hasPrefix("-") { return ClaudeTheme.statusError }
+        if trimmed.hasPrefix("/") || trimmed.hasPrefix("./")
+            || trimmed.hasPrefix("../") || trimmed.hasPrefix("~/") {
+            return ClaudeTheme.textPrimary
+        }
+        return ClaudeTheme.textSecondary
     }
 
     private func resultCard(_ result: String) -> some View {
@@ -635,11 +678,17 @@ struct PlainActivityRow: View {
             }
             return name.isEmpty ? "Read" : "Read — \(name)"
         case "bash":
+            // On error, surface the first line of the error inline so it's
+            // readable without expanding the row.
+            if tc.isError, let result = tc.result {
+                let line = firstNonEmptyLine(result)
+                return line.isEmpty ? "Error" : "Error  \(line)"
+            }
             if let cmd = tc.input["command"]?.stringValue {
                 let trimmed = cmd.trimmingCharacters(in: .whitespacesAndNewlines)
-                return String(trimmed.prefix(70))
+                return ">. " + String(trimmed.prefix(70))
             }
-            return "Run command"
+            return ">. "
         case "edit", "multiedit", "multi_edit":
             if let path = tc.input["file_path"]?.stringValue {
                 return "Edit — \(URL(fileURLWithPath: path).lastPathComponent)"
@@ -686,6 +735,8 @@ struct PlainActivityRow: View {
 struct TurnActivitySummaryView: View {
     let messages: [ChatMessage]
     @State private var isExpanded = false
+    // Per-row expand state, keyed by ActivityItem.id so it survives rebuilds.
+    @State private var expandedItems: Set<String> = []
 
     private var toolCallCount: Int {
         messages.reduce(0) { $0 + $1.blocks.compactMap(\.toolCall).count }
@@ -719,12 +770,21 @@ struct TurnActivitySummaryView: View {
                 if isExpanded {
                     let items = activityItems(from: messages)
                     ForEach(items) { item in
-                        PlainActivityRow(item: item)
+                        PlainActivityRow(item: item, isExpanded: binding(for: item.id))
                     }
                 }
             }
             Spacer(minLength: 40)
         }
+    }
+
+    private func binding(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { expandedItems.contains(id) },
+            set: { isOn in
+                if isOn { expandedItems.insert(id) } else { expandedItems.remove(id) }
+            }
+        )
     }
 }
 
