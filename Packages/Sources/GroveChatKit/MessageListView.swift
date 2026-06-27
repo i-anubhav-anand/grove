@@ -96,6 +96,34 @@ struct MessageListView: View {
                     .allowsHitTesting(false)
             }
         }
+        .overlay(alignment: .bottomTrailing) {
+            if !isNearBottom && isSessionReady {
+                scrollToBottomButton
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 16)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isNearBottom)
+    }
+
+    // MARK: - Scroll To Bottom
+
+    private var scrollToBottomButton: some View {
+        Button {
+            isNearBottom = true
+            scrollPosition.scrollTo(edge: .bottom)
+        } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+                .frame(width: 30, height: 30)
+                .background(.regularMaterial, in: Circle())
+                .overlay(Circle().strokeBorder(ClaudeTheme.border, lineWidth: 0.5))
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+        .help("Scroll to bottom")
     }
 
     // MARK: - Helpers
