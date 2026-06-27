@@ -209,7 +209,6 @@ struct FileTreeView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 1, content: content)
                 .padding(.vertical, 4)
-                .padding(.horizontal, 6)
         }
     }
 
@@ -251,42 +250,42 @@ private struct FileNodeRow: View {
                     onFileSelect(node)
                 }
             } label: {
-                // gap-1 (4px) between chevron, icon, and label
-                HStack(spacing: 4) {
-                    // Folders show a rotating `ChevronDownIcon` (size-4, muted).
-                    // Files get a blank of the same width so their icon aligns
-                    // under the folder label (shadcn `not-folder:ps-7`).
-                    if node.isDirectory {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                            .rotationEffect(.degrees(isExpanded ? 0 : -90))
-                            .frame(width: Self.chevronSlot, height: Self.chevronSlot)
-                    } else {
-                        Color.clear.frame(width: Self.chevronSlot, height: Self.chevronSlot)
+                // Indent is inside the label so the background spans full width.
+                HStack(spacing: 0) {
+                    Color.clear.frame(width: CGFloat(depth) * Self.indent)
+
+                    HStack(spacing: 4) {
+                        if node.isDirectory {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                                .foregroundStyle(ClaudeTheme.textTertiary)
+                                .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                                .frame(width: Self.chevronSlot, height: Self.chevronSlot)
+                        } else {
+                            Color.clear.frame(width: Self.chevronSlot, height: Self.chevronSlot)
+                        }
+
+                        Image(systemName: node.icon)
+                            .font(.system(size: ClaudeTheme.size(12)))
+                            .foregroundStyle(node.isDirectory ? ClaudeTheme.accent : node.iconColor)
+                            .frame(width: 16)
+
+                        Text(node.name)
+                            .font(.system(size: ClaudeTheme.size(13), design: node.isDirectory ? .default : .monospaced))
+                            .foregroundStyle(labelColor)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 4)
+
+                        if node.isDirectory && !node.children.isEmpty {
+                            Text("\(node.children.count)")
+                                .font(.system(size: ClaudeTheme.size(10)))
+                                .foregroundStyle(ClaudeTheme.textTertiary)
+                        }
                     }
-
-                    Image(systemName: node.icon)
-                        .font(.system(size: ClaudeTheme.size(12)))
-                        .foregroundStyle(node.isDirectory ? ClaudeTheme.accent : node.iconColor)
-                        .frame(width: 16)
-
-                    Text(node.name)
-                        .font(.system(size: ClaudeTheme.size(13), design: node.isDirectory ? .default : .monospaced))
-                        .foregroundStyle(labelColor)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 4)
-
-                    if node.isDirectory && !node.children.isEmpty {
-                        Text("\(node.children.count)")
-                            .font(.system(size: ClaudeTheme.size(10)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
                 }
-                // rounded-sm px-2 py-1.5
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
                 .overlay(
@@ -294,8 +293,6 @@ private struct FileNodeRow: View {
                         .strokeBorder(isSelected ? ClaudeTheme.accent.opacity(0.4) : .clear, lineWidth: 0.5)
                 )
                 .contentShape(Rectangle())
-                // ps-(--tree-padding): level * indent
-                .padding(.leading, CGFloat(depth) * Self.indent)
             }
             .buttonStyle(.plain)
             .animation(.easeInOut(duration: 0.12), value: isHovered)
