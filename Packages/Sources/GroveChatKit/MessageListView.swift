@@ -414,7 +414,9 @@ struct PlainActivityRow: View {
                 icon: markerIcon,
                 isRunning: isRunning,
                 label: markerLabel,
-                preview: thinkingPreview,
+                // Hide the preview once expanded — the full text shows below, so
+                // keeping the pill would just repeat the opening line.
+                preview: isExpanded ? nil : thinkingPreview,
                 expandable: hasExpandableContent,
                 isExpanded: isExpanded
             )
