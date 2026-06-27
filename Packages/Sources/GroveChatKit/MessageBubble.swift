@@ -103,7 +103,11 @@ struct MessageBubble: View {
             assistantTextBubble(text: text, blockId: block.id)
         }
         if let toolCall = block.toolCall {
-            if toolCall.name == "AskUserQuestion" {
+            let lower = toolCall.name.lowercased()
+            if ["edit", "write", "multiedit", "multi_edit"].contains(lower) {
+                // File edits are shown once, aggregated, by ChangedFilesCard below.
+                EmptyView()
+            } else if toolCall.name == "AskUserQuestion" {
                 AskUserQuestionView(toolCall: toolCall)
             } else {
                 PlainActivityRow(item: .toolCall(toolCall), isMessageStreaming: message.isStreaming)
@@ -501,7 +505,10 @@ private struct ChangedFilesCard: View {
 private struct ChangedFileRow: View {
     let edit: FileEdit
     let onOpen: () -> Void
-    @State private var hovering = false
+    @State private var fileHovered = false
+    @State private var previewHovered = false
+    @State private var isPreviewOpen = false
+    @State private var closeTask: Task<Void, Never>?
 
     private var actionIcon: String { edit.status == .added ? "square.and.pencil" : "pencil" }
     private var actionLabel: String { edit.status == .added ? "Write" : "Edit" }
@@ -523,6 +530,12 @@ private struct ChangedFileRow: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
                     .background(ClaudeTheme.surfaceSecondary.opacity(0.6), in: RoundedRectangle(cornerRadius: 4))
+                    // Hover the filename to preview its diff.
+                    .onHover { fileHovered = $0; syncPreview() }
+                    .popover(isPresented: $isPreviewOpen, arrowEdge: .trailing) {
+                        EditDiffPreview(edit: edit)
+                            .onHover { previewHovered = $0; syncPreview() }
+                    }
                 Spacer(minLength: 6)
                 if edit.added > 0 {
                     Text(verbatim: "+\(edit.added)")
@@ -541,9 +554,20 @@ private struct ChangedFileRow: View {
         }
         .buttonStyle(.plain)
         .pointerCursorOnHover()
-        .onHover { hovering = $0 }
-        .popover(isPresented: $hovering, arrowEdge: .trailing) {
-            EditDiffPreview(edit: edit)
+    }
+
+    /// Keep the preview open while either the filename or the popover is hovered;
+    /// close after a short grace period so moving into the popover doesn't dismiss it.
+    private func syncPreview() {
+        closeTask?.cancel()
+        if fileHovered || previewHovered {
+            isPreviewOpen = true
+        } else {
+            closeTask = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(180))
+                guard !Task.isCancelled else { return }
+                if !fileHovered && !previewHovered { isPreviewOpen = false }
+            }
         }
     }
 }
