@@ -15,10 +15,6 @@ struct WorkspaceListView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-
             if visibleProjects.isEmpty {
                 emptyState
             } else {
@@ -67,23 +63,13 @@ struct WorkspaceListView: View {
 
     // MARK: - Header
 
-    private var header: some View {
-        HStack {
-            Text("Workspaces")
-                .font(.system(size: ClaudeTheme.size(12), weight: .semibold))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .textCase(.uppercase)
-            Spacer()
-        }
-    }
-
     private func projectHeader(_ project: Project) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "folder.fill")
                 .font(.system(size: ClaudeTheme.size(10)))
                 .foregroundStyle(ClaudeTheme.accent.opacity(0.8))
             Text(project.name)
-                .font(.system(size: ClaudeTheme.size(11), weight: .semibold))
+                .font(.system(size: ClaudeTheme.size(11), weight: .medium))
                 .lineLimit(1)
             Spacer()
             Button {
@@ -169,7 +155,7 @@ struct WorkspaceListView: View {
                     .help(prStateHelp(ws))
             }
             Text(summary.title)
-                .font(.system(size: ClaudeTheme.size(12), weight: isCurrent ? .medium : .regular))
+                .font(.system(size: ClaudeTheme.size(11), weight: isCurrent ? .medium : .regular))
                 .foregroundStyle(.primary.opacity(0.85))
                 .lineLimit(1)
             Spacer(minLength: 4)
@@ -187,7 +173,7 @@ struct WorkspaceListView: View {
                     .foregroundStyle(ClaudeTheme.textTertiary)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
         .padding(.horizontal, 4)
         .contentShape(Rectangle())
         .background(isCurrent ? ClaudeTheme.accent.opacity(0.15) : .clear,
@@ -205,6 +191,7 @@ struct WorkspaceListView: View {
                 Label("Delete session", systemImage: "trash")
             }
         }
+        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 8))
     }
 
     private var emptyState: some View {
