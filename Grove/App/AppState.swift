@@ -126,6 +126,9 @@ final class AppState {
     /// from the CLI's `<sessionId>/subagents/` dir so the agent row can show steps.
     private var subagentRunsBySession: [String: [String: SubagentRun]] = [:]
 
+    /// Throttle timestamps for live subagent-run refreshes during streaming.
+    private var lastSubagentRefresh: [String: Date] = [:]
+
     /// Retained token for the NSApplication.didBecomeActiveNotification observer.
     /// Stored so we can remove it in deinit.
     private var didBecomeActiveObserverToken: NSObjectProtocol?
@@ -1228,6 +1231,9 @@ final class AppState {
                     }
                     continue
                 }
+
+                // Surface subagent depth live as the CLI writes agent-*.jsonl files.
+                refreshSubagentRunsLive(sessionId: sessionKey, cwd: cwd)
 
                 switch event {
                 case .system(let systemEvent):
@@ -2656,6 +2662,23 @@ final class AppState {
     /// Reloads committed messages from the CLI's jsonl, unconditionally replacing
     /// `committedMessages`. Skipped only when the session is actively streaming
     /// (tail holds the in-progress turn). Safe to call from any trigger.
+    /// Loads subagent runs from disk during an active stream (throttled), so the
+    /// Agent/Task rows show their step depth as the run progresses rather than only
+    /// after the turn settles. No-ops until the real session id (and its
+    /// `subagents/` dir) exists.
+    private func refreshSubagentRunsLive(sessionId: String, cwd: String) {
+        let now = Date()
+        if let last = lastSubagentRefresh[sessionId], now.timeIntervalSince(last) < 1.2 { return }
+        lastSubagentRefresh[sessionId] = now
+        Task.detached(priority: .utility) { [weak self] in
+            guard let self else { return }
+            let url = await self.cliStore.directory(forCwd: cwd).appendingPathComponent("\(sessionId).jsonl")
+            let runs = SubagentStepsLoader.load(mainSessionJSONL: url)
+            guard !runs.isEmpty else { return }
+            await MainActor.run { self.subagentRunsBySession[sessionId] = runs }
+        }
+    }
+
     private func reloadCommittedFromDisk(sessionId: String, projectId: UUID, cwd: String) {
         let summary = summaryFor(sessionId: sessionId, projectId: projectId)
         let lastKey = lastCommittedReloadKey[sessionId]

@@ -384,13 +384,25 @@ struct PlainActivityRow: View {
         return chatBridge.subagentRuns[tc.id]
     }
 
+    /// A one-line greyish preview of a thinking block, shown next to "Thinking".
+    private var thinkingPreview: String? {
+        guard case .thinking(_, let text, _) = item else { return nil }
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let firstLine = t.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? t
+        return firstLine.count > 80 ? String(firstLine.prefix(80)) + "…" : firstLine
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Marker header — tap to expand when there's detail to show
             ChatMarker(
                 icon: markerIcon,
                 isRunning: isRunning,
-                label: markerLabel
+                label: markerLabel,
+                preview: thinkingPreview,
+                expandable: hasExpandableContent,
+                isExpanded: isExpanded
             )
             .contentShape(Rectangle())
             .onTapGesture {
