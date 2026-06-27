@@ -23,49 +23,56 @@ struct StatusLineView: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
             if let project = windowState.selectedProject {
-                segment(icon: "folder.fill", text: abbreviatePath(project.path), color: ClaudeTheme.statusWarning)
-            }
-
-            segment(icon: "cpu", text: modelDisplayName, color: ClaudeTheme.statusSuccess)
-
-            Divider().frame(height: 12)
-
-            rateLimitSegment(label: String(localized: "5h", bundle: .module), icon: "clock", percent: rateLimit?.fiveHourPercent, resetsAt: rateLimit?.fiveHourResetsAt)
-            rateLimitSegment(label: String(localized: "7d", bundle: .module), icon: "calendar", percent: rateLimit?.sevenDayPercent, resetsAt: rateLimit?.sevenDayResetsAt)
-
-            Divider().frame(height: 12)
-
-            HStack(spacing: 4) {
-                Image(systemName: "memorychip")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                Text("context", bundle: .module)
-                if let ctxPct = contextPercentage {
-                    miniBar(percent: ctxPct)
-                    Text("\(Int(ctxPct))%")
-                        .foregroundStyle(colorForPercent(ctxPct))
-                } else {
-                    Text("--")
+                chip {
+                    segment(icon: "folder.fill", text: abbreviatePath(project.path), color: ClaudeTheme.statusWarning)
                 }
             }
-            .foregroundStyle(ClaudeTheme.textTertiary)
+
+            chip {
+                segment(icon: "cpu", text: modelDisplayName, color: ClaudeTheme.statusSuccess)
+            }
+
+            chip {
+                rateLimitSegment(label: String(localized: "5h", bundle: .module), icon: "clock", percent: rateLimit?.fiveHourPercent, resetsAt: rateLimit?.fiveHourResetsAt)
+            }
+            chip {
+                rateLimitSegment(label: String(localized: "7d", bundle: .module), icon: "calendar", percent: rateLimit?.sevenDayPercent, resetsAt: rateLimit?.sevenDayResetsAt)
+            }
+
+            chip {
+                HStack(spacing: 4) {
+                    Image(systemName: "memorychip")
+                        .font(.system(size: ClaudeTheme.size(10)))
+                    Text("context", bundle: .module)
+                    if let ctxPct = contextPercentage {
+                        miniBar(percent: ctxPct)
+                        Text("\(Int(ctxPct))%")
+                            .foregroundStyle(colorForPercent(ctxPct))
+                    } else {
+                        Text("--")
+                    }
+                }
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            }
 
             Spacer()
 
-            HStack(spacing: 4) {
-                Image(systemName: "stopwatch")
-                    .font(.system(size: ClaudeTheme.size(10)))
-                Text(formatTotalDuration(totalResponseDuration))
+            chip {
+                HStack(spacing: 4) {
+                    Image(systemName: "stopwatch")
+                        .font(.system(size: ClaudeTheme.size(10)))
+                    Text(formatTotalDuration(totalResponseDuration))
+                }
+                .foregroundStyle(ClaudeTheme.textTertiary)
             }
-            .foregroundStyle(ClaudeTheme.textTertiary)
         }
         .font(.system(size: ClaudeTheme.size(12), weight: .medium, design: .monospaced))
-        .padding(.leading, 12)
-        .padding(.trailing, 20)
-        .frame(height: 28)
+        .padding(.horizontal, 12)
+        .frame(height: 34)
         .padding(.bottom, 4)
-        .background(ClaudeTheme.surfacePrimary)
+        .background(ClaudeTheme.background)
         .overlay(alignment: .top) {
             ClaudeTheme.borderSubtle.frame(height: 0.5)
         }
@@ -82,6 +89,16 @@ struct StatusLineView: View {
                 Task { await refreshRateLimit() }
             }
         }
+    }
+
+    // MARK: - Chip
+
+    /// Wraps a status segment in a subtle rounded chip for visual grouping.
+    private func chip<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(ClaudeTheme.surfaceSecondary.opacity(0.6), in: Capsule())
     }
 
     // MARK: - Segment

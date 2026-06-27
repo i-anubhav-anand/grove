@@ -7,8 +7,6 @@ import GroveChatKit
 struct MainView: View {
     @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
-    @State private var showGitHubSheet = false
-    @State private var showFilePicker = false
     @Environment(\.openSettings) private var openSettings
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
@@ -85,43 +83,6 @@ struct MainView: View {
                     let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
                     return "Grove(\(appVersion))"
                 }())
-                .toolbar {
-                    if columnVisibility != .detailOnly {
-                        ToolbarItemGroup(placement: .confirmationAction) {
-                            Menu {
-                                Button {
-                                    showFilePicker = true
-                                } label: {
-                                    Label("Open project", systemImage: "folder")
-                                }
-                                Button {
-                                    showGitHubSheet = true
-                                } label: {
-                                    Label("Open GitHub project", systemImage: "globe")
-                                }
-                                Divider()
-                                Button {
-                                    quickStart()
-                                } label: {
-                                    Label("Quick start", systemImage: "plus.square.on.square")
-                                }
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: ClaudeTheme.size(16)))
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
-                            }
-                            .menuIndicator(.hidden)
-                            .help("New project")
-                            .fileImporter(
-                                isPresented: $showFilePicker,
-                                allowedContentTypes: [.folder],
-                                allowsMultipleSelection: false
-                            ) { result in
-                                handleFolderSelection(result)
-                            }
-                        }
-                    }
-                }
                 .layoutPriority(1)
             }
             .overlay {
@@ -177,9 +138,6 @@ struct MainView: View {
         }
         .background(ClaudeTheme.sidebarBackground)
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
-        .sheet(isPresented: $showGitHubSheet) {
-            GitHubSheet()
-        }
     }
 
     @Environment(\.openWindow) private var openWindow
@@ -242,49 +200,6 @@ struct MainView: View {
         }
     }
 
-    // MARK: - Folder Selection
-
-    private func handleFolderSelection(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
-        Task { await appState.addProjectFromFolder(url, in: windowState) }
-    }
-
-    /// Quick start: pick a location + name, create the folder, `git init` it, and
-    /// add it as a project — a fresh local repo ready for an agent.
-    private func quickStart() {
-        let panel = NSSavePanel()
-        panel.title = "Quick start — new project"
-        panel.prompt = "Create"
-        panel.nameFieldLabel = "Project name:"
-        panel.nameFieldStringValue = "new-project"
-        panel.canCreateDirectories = true
-        try? FileManager.default.createDirectory(at: GroveHome.repos, withIntermediateDirectories: true)
-        panel.directoryURL = GroveHome.repos
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        Task {
-            do {
-                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-                await Self.gitInit(at: url)
-                await appState.addProjectFromFolder(url, in: windowState)
-            } catch {
-                windowState.errorMessage = "Couldn't create project: \(error.localizedDescription)"
-                windowState.showError = true
-            }
-        }
-    }
-
-    private static func gitInit(at url: URL) async {
-        await Task.detached {
-            let proc = Process()
-            proc.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            proc.arguments = ["init"]
-            proc.currentDirectoryURL = url
-            proc.standardOutput = FileHandle.nullDevice
-            proc.standardError = FileHandle.nullDevice
-            try? proc.run()
-            proc.waitUntilExit()
-        }.value
-    }
 }
 
 // MARK: - Detail Toolbar (isolated struct — no selectedProject dependency, prevents NSToolbar re-layout on project switch)

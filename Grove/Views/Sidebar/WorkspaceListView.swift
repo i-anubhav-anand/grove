@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 import GroveCore
 
 struct WorkspaceListView: View {
@@ -9,9 +11,16 @@ struct WorkspaceListView: View {
     @State private var pendingArchive: Workspace?
     @State private var pendingDeleteSession: ChatSession.Summary?
     @State private var pendingDeleteProject: Project?
+    @State private var showFilePicker = false
+    @State private var showGitHubSheet = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if !windowState.isProjectWindow {
+                newProjectMenu
+                    .padding(.horizontal, 10)
+                    .padding(.top, 8)
+            }
             if visibleProjects.isEmpty {
                 emptyState
             } else {
@@ -65,6 +74,16 @@ struct WorkspaceListView: View {
         .sheet(item: $creatingForProject) { project in
             NewWorkspaceSheet(preselectedProject: project)
         }
+        .sheet(isPresented: $showGitHubSheet) {
+            GitHubSheet()
+        }
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFolderSelection(result)
+        }
         .alert("Archive workspace?", isPresented: archiveAlertBinding, presenting: pendingArchive) { ws in
             Button("Force archive", role: .destructive) {
                 Task { try? await appState.deleteWorkspace(ws, force: true) }
@@ -89,6 +108,82 @@ struct WorkspaceListView: View {
         } message: { project in
             Text("Remove \"\(project.name)\" and its sessions? Worktrees are deleted. If Grove created this repo (under ~/Grove/repos) the folder is removed too; an externally opened folder is left in place.")
         }
+    }
+
+    // MARK: - New Project
+
+    private var newProjectMenu: some View {
+        Menu {
+            Button { showFilePicker = true } label: {
+                Label("Open project", systemImage: "folder")
+            }
+            Button { showGitHubSheet = true } label: {
+                Label("Open GitHub project", systemImage: "globe")
+            }
+            Divider()
+            Button { quickStart() } label: {
+                Label("Quick start", systemImage: "plus.square.on.square")
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .medium))
+                Text("New project")
+                    .font(.system(size: ClaudeTheme.size(13), weight: .semibold))
+                Spacer()
+            }
+            .foregroundStyle(ClaudeTheme.accent)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(ClaudeTheme.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudeTheme.accent.opacity(0.25), lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .help("New project")
+    }
+
+    private func handleFolderSelection(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        Task { await appState.addProjectFromFolder(url, in: windowState) }
+    }
+
+    /// Quick start: pick a location + name, create the folder, `git init` it, and
+    /// add it as a project — a fresh local repo ready for an agent.
+    private func quickStart() {
+        let panel = NSSavePanel()
+        panel.title = "Quick start — new project"
+        panel.prompt = "Create"
+        panel.nameFieldLabel = "Project name:"
+        panel.nameFieldStringValue = "new-project"
+        panel.canCreateDirectories = true
+        try? FileManager.default.createDirectory(at: GroveHome.repos, withIntermediateDirectories: true)
+        panel.directoryURL = GroveHome.repos
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            do {
+                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+                await Self.gitInit(at: url)
+                await appState.addProjectFromFolder(url, in: windowState)
+            } catch {
+                windowState.errorMessage = "Couldn't create project: \(error.localizedDescription)"
+                windowState.showError = true
+            }
+        }
+    }
+
+    private static func gitInit(at url: URL) async {
+        await Task.detached {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+            proc.arguments = ["init"]
+            proc.currentDirectoryURL = url
+            proc.standardOutput = FileHandle.nullDevice
+            proc.standardError = FileHandle.nullDevice
+            try? proc.run()
+            proc.waitUntilExit()
+        }.value
     }
 
     // MARK: - Header
