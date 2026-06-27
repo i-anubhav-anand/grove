@@ -203,52 +203,52 @@ private struct SessionCardRow: View {
                     .foregroundStyle(ClaudeTheme.textTertiary.opacity(isHovered ? 0.8 : 0.3))
                     .frame(width: 16)
 
-                // Status icon box
+                // Media — state-driven leading icon (spinner while running)
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(statusColor.opacity(0.15))
+                        .fill(state.tint.opacity(0.15))
                         .frame(width: 28, height: 28)
-                    Image(systemName: statusIcon)
-                        .font(.system(size: ClaudeTheme.size(12), weight: .medium))
-                        .foregroundStyle(statusColor)
+                    if state == .running {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: state.icon)
+                            .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                            .foregroundStyle(state.tint)
+                    }
                 }
 
-                // Title + branch
+                // Content — title + state description
                 VStack(alignment: .leading, spacing: 2) {
                     Text(summary.title)
                         .font(.system(size: ClaudeTheme.size(13), weight: .medium))
                         .foregroundStyle(ClaudeTheme.textPrimary)
                         .lineLimit(1)
 
-                    if let ws = workspace {
-                        HStack(spacing: 3) {
+                    HStack(spacing: 3) {
+                        if let ws = workspace {
                             Image(systemName: "arrow.triangle.branch")
                                 .font(.system(size: ClaudeTheme.size(9)))
                             Text(ws.branch)
-                                .font(.system(size: ClaudeTheme.size(11)))
+                        } else {
+                            Text(state.description)
                         }
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                        .lineLimit(1)
-                    } else {
-                        Text("no branch")
-                            .font(.system(size: ClaudeTheme.size(11)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
                     }
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
+                    .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Badge + diff / spinner
+                // Actions — state badge + diff stat
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(badgeLabel)
+                    Text(state.description)
                         .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                        .foregroundStyle(statusColor)
+                        .foregroundStyle(state.tint)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(statusColor.opacity(0.12), in: Capsule())
+                        .background(state.tint.opacity(0.12), in: Capsule())
 
-                    if isStreaming {
-                        ProgressView().controlSize(.mini)
-                    } else if let d = diffStat, !d.isEmpty {
+                    if let d = diffStat, !d.isEmpty {
                         HStack(spacing: 3) {
                             Text("+\(d.added)").foregroundStyle(ClaudeTheme.statusSuccess)
                             Text("-\(d.deleted)").foregroundStyle(ClaudeTheme.statusError)
@@ -287,47 +287,75 @@ private struct SessionCardRow: View {
         }
     }
 
-    // MARK: - Appearance
+    // MARK: - State (Attachment-style: running / prOpen / merged / closed / status)
 
-    private var statusColor: Color {
-        switch prState {
-        case .open:   return ClaudeTheme.statusSuccess
-        case .merged: return Color(red: 0.54, green: 0.34, blue: 0.90)
-        case .closed: return ClaudeTheme.statusError
-        case nil:
-            switch workspace?.status {
-            case .inProgress: return .blue
-            case .inReview:   return .orange
-            case .done:       return ClaudeTheme.statusSuccess
-            default:          return ClaudeTheme.textTertiary
-            }
-        }
-    }
+    private enum CardState: Equatable {
+        case running        // streaming — progress loading
+        case prOpen         // PR raised
+        case merged         // PR merged
+        case closed         // PR closed without merge
+        case inProgress
+        case inReview
+        case done
+        case backlog
 
-    private var statusIcon: String {
-        switch prState {
-        case .open:   return "arrow.triangle.branch"
-        case .merged: return "checkmark.seal.fill"
-        case .closed: return "xmark.circle.fill"
-        case nil:
-            switch workspace?.status {
+        var icon: String {
+            switch self {
+            case .running:    return "circle.dashed"        // (covered by spinner)
+            case .prOpen:     return "arrow.triangle.pull"  // PR raised
+            case .merged:     return "checkmark.seal.fill"  // PR merged
+            case .closed:     return "xmark.circle.fill"
             case .inProgress: return "bolt.fill"
             case .inReview:   return "eye.fill"
             case .done:       return "checkmark.circle.fill"
-            default:          return "clock"
+            case .backlog:    return "clock"
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .running:    return "Running"
+            case .prOpen:     return "PR open"
+            case .merged:     return "Merged"
+            case .closed:     return "Closed"
+            case .inProgress: return "In Progress"
+            case .inReview:   return "In Review"
+            case .done:       return "Done"
+            case .backlog:    return "Backlog"
+            }
+        }
+
+        @MainActor var tint: Color {
+            switch self {
+            case .running:    return ClaudeTheme.statusRunning
+            case .prOpen:     return ClaudeTheme.statusSuccess
+            case .merged:     return Color(red: 0.54, green: 0.34, blue: 0.90)
+            case .closed:     return ClaudeTheme.statusError
+            case .inProgress: return .blue
+            case .inReview:   return .orange
+            case .done:       return ClaudeTheme.statusSuccess
+            case .backlog:    return ClaudeTheme.textTertiary
             }
         }
     }
 
-    private var badgeLabel: String {
-        if isStreaming { return "running" }
+    private var state: CardState {
+        if isStreaming { return .running }
         switch prState {
-        case .open:   return "PR open"
-        case .merged: return "merged"
-        case .closed: return "closed"
-        case nil:     return workspace?.status.label ?? "backlog"
+        case .open:   return .prOpen
+        case .merged: return .merged
+        case .closed: return .closed
+        case nil:
+            switch workspace?.status {
+            case .inProgress: return .inProgress
+            case .inReview:   return .inReview
+            case .done:       return .done
+            default:          return .backlog
+            }
         }
     }
+
+    // MARK: - Appearance
 
     private var cardBackground: Color {
         if isCurrent  { return ClaudeTheme.accent.opacity(0.10) }
