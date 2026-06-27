@@ -827,6 +827,11 @@ final class AppState {
         case "clear":
             startNewChat(in: window)
             return true
+        case "diff":
+            // Show Grove's native Changes panel instead of launching a terminal.
+            window.inspectorTab = .changes
+            window.showInspector = true
+            return true
         case "model":
             if parts.count > 1 {
                 let arg = String(parts[1]).trimmingCharacters(in: .whitespaces).lowercased()
