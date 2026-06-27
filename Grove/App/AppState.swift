@@ -122,6 +122,10 @@ final class AppState {
     /// both attributes match, so shrink/rewrite always triggers a fresh parse.
     private var lastCommittedReloadKey: [String: ReloadCacheKey] = [:]
 
+    /// Subagent runs per session (keyed by sessionId → toolUseId → run), loaded
+    /// from the CLI's `<sessionId>/subagents/` dir so the agent row can show steps.
+    private var subagentRunsBySession: [String: [String: SubagentRun]] = [:]
+
     /// Retained token for the NSApplication.didBecomeActiveNotification observer.
     /// Stored so we can remove it in deinit.
     private var didBecomeActiveObserverToken: NSObjectProtocol?
@@ -676,6 +680,7 @@ final class AppState {
             withObservationTracking {
                 let state = streamState(in: window)
                 bridge.messages = state.allMessages
+                bridge.subagentRuns = window.currentSessionId.flatMap { self.subagentRunsBySession[$0] } ?? [:]
                 bridge.isStreaming = state.isStreaming
                 bridge.isThinking = state.isThinking
                 bridge.streamingStartDate = state.streamingStartDate
@@ -2673,7 +2678,9 @@ final class AppState {
 
             guard let full = await self.persistence.loadFullSession(summary: summary, cwd: cwd) else { return }
             let cleaned = await self.cleanLoadedMessages(full.messages)
+            let subagentRuns = SubagentStepsLoader.load(mainSessionJSONL: url)
             await MainActor.run {
+                self.subagentRunsBySession[sessionId] = subagentRuns
                 guard var state = self.sessionStates[sessionId],
                       !state.isStreaming else { return }
                 if let currentSize, let currentMtime {

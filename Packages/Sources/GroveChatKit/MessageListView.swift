@@ -357,10 +357,18 @@ func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
 /// Card-free row for the activity summary list. The row is plain text with a
 /// hover highlight; clicking expands an inline scrollable content card.
 struct PlainActivityRow: View {
+    @Environment(ChatBridge.self) private var chatBridge
     let item: ActivityItem
     var isMessageStreaming: Bool = false
     @State private var isExpanded = false
     @State private var isContentExpanded = false
+
+    /// The subagent run behind an Agent/Task tool call, if its steps were recorded.
+    private var subagentRun: SubagentRun? {
+        guard case .toolCall(let tc) = item,
+              ["agent", "task"].contains(tc.name.lowercased()) else { return nil }
+        return chatBridge.subagentRuns[tc.id]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -405,11 +413,16 @@ struct PlainActivityRow: View {
         switch item {
         case .thinking: return isRunning ? "Thinking..." : "Thinking"
         case .toolCall(let tc):
-            return isRunning ? runningLabel(for: tc) : label(for: tc)
+            let base = isRunning ? runningLabel(for: tc) : label(for: tc)
+            if let run = subagentRun, !run.steps.isEmpty {
+                return "\(base) · \(run.steps.count) steps"
+            }
+            return base
         }
     }
 
     private var hasExpandableContent: Bool {
+        if subagentRun != nil { return true }
         switch item {
         case .thinking(_, let text, _): return !text.isEmpty
         case .toolCall(let tc): return tc.result != nil || tc.input["command"] != nil
@@ -420,7 +433,9 @@ struct PlainActivityRow: View {
 
     @ViewBuilder
     private var rowContent: some View {
-        if case .thinking(_, let text, _) = item {
+        if let run = subagentRun {
+            AgentStepsView(run: run)
+        } else if case .thinking(_, let text, _) = item {
             Text(text)
                 .font(.system(size: ClaudeTheme.messageSize(12)))
                 .foregroundStyle(ClaudeTheme.textSecondary)

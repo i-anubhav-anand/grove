@@ -20,6 +20,10 @@ public final class ChatBridge {
     public var sessionStats: ChatSessionStats = ChatSessionStats()
     public var autoPreviewSettings: AttachmentAutoPreviewSettings = AttachmentAutoPreviewSettings()
 
+    /// Subagent runs for the current session, keyed by the parent Agent/Task
+    /// tool-use id. Lets the agent row expand into the steps the subagent took.
+    public var subagentRuns: [String: SubagentRun] = [:]
+
     // MARK: - Action Handlers (set up by the app target)
 
     public var sendHandler: (() async -> Void)?
