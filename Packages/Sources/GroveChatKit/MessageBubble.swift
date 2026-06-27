@@ -108,18 +108,36 @@ struct MessageBubble: View {
             if toolCall.name == "AskUserQuestion" {
                 AskUserQuestionView(toolCall: toolCall)
             } else {
-                PlainActivityRow(item: .toolCall(toolCall), isMessageStreaming: message.isStreaming)
+                PlainActivityRow(item: .toolCall(toolCall))
             }
         }
         if block.isThinking, let text = block.thinking, !text.isEmpty {
-            PlainActivityRow(item: .thinking(id: block.id, text: text, duration: block.thinkingDuration), isMessageStreaming: message.isStreaming)
+            PlainActivityRow(item: .thinking(id: block.id, text: text, duration: block.thinkingDuration))
         }
     }
 
     // MARK: - Compact Boundary Bubble
 
     private var compactBoundaryBubble: some View {
-        ChatMarker(icon: "arrow.trianglehead.2.clockwise", label: message.content)
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.trianglehead.2.clockwise")
+                .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            Text(message.content)
+                .font(.system(size: ClaudeTheme.messageSize(13), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .background(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .fill(ClaudeTheme.surfacePrimary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall)
+                .strokeBorder(ClaudeTheme.border, lineWidth: BubbleStyle.borderWidth)
+        )
     }
 
     // MARK: - Error Bubble
