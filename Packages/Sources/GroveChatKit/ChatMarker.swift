@@ -1,14 +1,7 @@
 import SwiftUI
 import GroveCore
 
-/// Horizontal rule marker — two lines with centered icon + text between them.
-///
-/// Matches the `Marker` / `MarkerContent` / `MarkerIcon` React pattern:
-/// ```
-/// [────] [icon] Label [────]          // default
-/// [────] [⏳]   Thinking… [────]     // status (spinner + shimmer)
-/// [──────────] Label [──────────]     // separator (no icon)
-/// ```
+/// Left-aligned activity marker: icon + text, shimmer while running.
 struct ChatMarker: View {
     var icon: String? = nil
     var isRunning: Bool = false
@@ -17,40 +10,25 @@ struct ChatMarker: View {
     @State private var shimmerPhase: CGFloat = 0
 
     var body: some View {
-        HStack(spacing: 8) {
-            markerLine
-
-            HStack(spacing: 5) {
-                if isRunning {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .tint(ClaudeTheme.textTertiary)
-                } else if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textTertiary)
-                }
-
-                Text(label)
-                    .font(.system(size: ClaudeTheme.messageSize(12)))
+        HStack(spacing: 5) {
+            if isRunning {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(ClaudeTheme.textTertiary)
+            } else if let icon {
+                Image(systemName: icon)
+                    .font(.system(size: ClaudeTheme.messageSize(10), weight: .medium))
                     .foregroundStyle(ClaudeTheme.textTertiary)
-                    .lineLimit(1)
-                    .overlay(
-                        // Shimmer sweep while running
-                        isRunning ? shimmerOverlay : nil
-                    )
             }
-            .fixedSize()
 
-            markerLine
+            Text(label)
+                .font(.system(size: ClaudeTheme.messageSize(12)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+                .lineLimit(1)
+                .overlay(isRunning ? shimmerOverlay : nil)
         }
-        .padding(.vertical, 6)
-    }
-
-    private var markerLine: some View {
-        Rectangle()
-            .frame(height: 0.5)
-            .foregroundStyle(Color.primary.opacity(0.10))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 3)
     }
 
     // Sweeping shimmer: a bright band moves left→right over the text.
