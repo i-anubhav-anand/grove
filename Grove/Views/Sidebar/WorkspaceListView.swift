@@ -443,7 +443,8 @@ private struct SessionCardRow: View {
         case prOpen         // PR raised
         case merged         // PR merged
         case closed         // PR closed without merge
-        case committed      // local commits ahead, no PR yet
+        case committed      // clean tree, local commits ahead, no PR yet
+        case uncommitted    // working-tree changes not yet committed
         case inProgress
         case inReview
         case done
@@ -456,6 +457,7 @@ private struct SessionCardRow: View {
             case .merged:     return "checkmark.seal.fill"  // PR merged
             case .closed:     return "xmark.circle.fill"
             case .committed:  return "checkmark.circle"     // committed, not pushed/PR'd
+            case .uncommitted: return "pencil.line"         // dirty working tree
             case .inProgress: return "bolt.fill"
             case .inReview:   return "eye.fill"
             case .done:       return "checkmark.circle.fill"
@@ -470,6 +472,7 @@ private struct SessionCardRow: View {
             case .merged:     return "Merged"
             case .closed:     return "Closed"
             case .committed:  return "Committed"
+            case .uncommitted: return "Uncommitted"
             case .inProgress: return "In Progress"
             case .inReview:   return "In Review"
             case .done:       return "Done"
@@ -484,6 +487,7 @@ private struct SessionCardRow: View {
             case .merged:     return Color(red: 0.54, green: 0.34, blue: 0.90)
             case .closed:     return ClaudeTheme.statusError
             case .committed:  return .teal
+            case .uncommitted: return ClaudeTheme.statusWarning
             case .inProgress: return .blue
             case .inReview:   return .orange
             case .done:       return ClaudeTheme.statusSuccess
@@ -499,7 +503,9 @@ private struct SessionCardRow: View {
         case .merged: return .merged
         case .closed: return .closed
         case nil:
-            // No PR — surface committed-but-not-pushed work, else board status.
+            // No PR. Uncommitted working changes win over committed-ahead work
+            // (you're mid-edit); a clean tree with commits ahead is "Committed".
+            if let d = diffStat, !d.isEmpty { return .uncommitted }
             if commitsAhead > 0 { return .committed }
             switch workspace?.status {
             case .inProgress: return .inProgress
