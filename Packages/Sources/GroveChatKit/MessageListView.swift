@@ -11,6 +11,12 @@ struct MessageListView: View {
     @State private var scrollTask: Task<Void, Never>?
     @State private var isNearBottom = true
     @State private var isSessionReady = false
+    @State private var chatWidth: CGFloat = 0
+
+    /// Cap each message bubble (query + response) at 75% of the chat column.
+    private var bubbleMaxWidth: CGFloat {
+        chatWidth > 0 ? max(0, chatWidth - 40) * 0.75 : .infinity
+    }
 
     var body: some View {
         ScrollView {
@@ -94,6 +100,14 @@ struct MessageListView: View {
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isNearBottom)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.onChange(of: proxy.size.width, initial: true) { _, w in
+                    chatWidth = w
+                }
+            }
+        }
+        .environment(\.bubbleMaxWidth, bubbleMaxWidth)
     }
 
     // MARK: - Scroll To Bottom

@@ -5,6 +5,7 @@ import GroveCore
 struct MessageBubble: View {
     @Environment(ChatBridge.self) private var chatBridge
     @Environment(WindowState.self) private var windowState
+    @Environment(\.bubbleMaxWidth) private var bubbleMaxWidth
     let message: ChatMessage
     @State private var isCopied = false
     @State private var cursorVisible = true
@@ -21,7 +22,7 @@ struct MessageBubble: View {
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
             if message.role == .user {
-                Spacer(minLength: 80)
+                Spacer(minLength: 0)
             }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 8) {
@@ -88,9 +89,10 @@ struct MessageBubble: View {
                     }
                 }
             }
+            .frame(maxWidth: bubbleMaxWidth, alignment: message.role == .user ? .trailing : .leading)
 
             if message.role == .assistant {
-                Spacer(minLength: 40)
+                Spacer(minLength: 0)
             }
         }
     }
@@ -675,3 +677,18 @@ private struct EmergeModifier: ViewModifier {
     }
 }
 
+
+// MARK: - Bubble Max Width
+
+/// Caps how wide a message bubble (user query or assistant response) may grow,
+/// set from the chat width so neither side spans the full column.
+private struct BubbleMaxWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = .infinity
+}
+
+extension EnvironmentValues {
+    var bubbleMaxWidth: CGFloat {
+        get { self[BubbleMaxWidthKey.self] }
+        set { self[BubbleMaxWidthKey.self] = newValue }
+    }
+}
