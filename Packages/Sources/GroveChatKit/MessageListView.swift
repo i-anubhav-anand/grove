@@ -299,13 +299,16 @@ struct StreamingMessageView: View {
 
     var body: some View {
         let messages = chatBridge.messages
-        let isActive = !activeResponseMessages(from: messages).isEmpty
+        let activeMessages = activeResponseMessages(from: messages)
         Group {
-            if isActive {
-                // While a turn is in flight we don't render the intermediate
-                // thinking/tool/text — just a compact running indicator. The full
-                // response renders at once when the turn settles, for a smoother
-                // load. (The user's own message is already in the settled list.)
+            if !activeMessages.isEmpty {
+                // Render the in-flight turn incrementally — each step (thinking,
+                // tool, text) appears as it streams in — and keep a running timer
+                // pinned at the bottom so progress is always visible.
+                ForEach(activeMessages, id: \.id) { message in
+                    MessageBubble(message: message)
+                        .id(message.id)
+                }
                 RunningIndicator()
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 4)
