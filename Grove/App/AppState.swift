@@ -900,6 +900,11 @@ final class AppState {
             return
         }
 
+        // Run in the active session's worktree (falling back to the project root)
+        // so commands like /diff — and resuming the session below — operate on the
+        // same checkout the chat uses, not the base repo.
+        let cwd = window.selectedWorkspace?.worktreePath ?? project.path
+
         let arguments: [String]
         if rawShell {
             arguments = ["-il"]
@@ -908,14 +913,21 @@ final class AppState {
                 handleError(AppError.claudeNotInstalled, in: window)
                 return
             }
-            arguments = ["-ilc", binary]
+            // Resume the current chat session so interactive commands (/model,
+            // /diff, /cost, …) run inside it instead of spawning a new session.
+            let isPending = window.currentSessionId.map { window.pendingPlaceholderIds.contains($0) } ?? false
+            if let sessionId = window.currentSessionId, !isPending {
+                arguments = ["-ilc", "\(binary) --resume \(sessionId)"]
+            } else {
+                arguments = ["-ilc", binary]
+            }
         }
 
         window.interactiveTerminal = InteractiveTerminalState(
             title: title,
             executable: "/bin/zsh",
             arguments: arguments,
-            currentDirectory: project.path,
+            currentDirectory: cwd,
             initialCommand: initialCommand,
             reportToChat: reportToChat
         )
