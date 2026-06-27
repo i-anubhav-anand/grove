@@ -80,14 +80,10 @@ struct MessageBubble: View {
                 if message.role == .assistant && !message.isStreaming {
                     let edits = fileEdits
                     if !edits.isEmpty {
-                        FlowLayout(spacing: 6) {
-                            ForEach(edits) { edit in
-                                FileEditPill(edit: edit) {
-                                    windowState.diffFile = PreviewFile(
-                                        path: edit.path, name: edit.name, editHunks: edit.hunks
-                                    )
-                                }
-                            }
+                        ChangedFilesCard(edits: edits) { edit in
+                            windowState.diffFile = PreviewFile(
+                                path: edit.path, name: edit.name, editHunks: edit.hunks
+                            )
                         }
                     }
                 }
@@ -424,11 +420,13 @@ struct MessageBubble: View {
                   let path = tc.input["file_path"]?.stringValue else { continue }
             var added = 0, removed = 0
             var hunks: [PreviewFile.EditHunk] = []
+            var status: FileEdit.Status = .modified
             switch tc.name.lowercased() {
             case "write":
                 let content = tc.input["content"]?.stringValue ?? ""
                 added = lineCount(content)
                 hunks = [PreviewFile.EditHunk(oldString: "", newString: content)]
+                status = .added
             case "edit":
                 let old = tc.input["old_string"]?.stringValue ?? ""
                 let new = tc.input["new_string"]?.stringValue ?? ""
@@ -449,9 +447,11 @@ struct MessageBubble: View {
                 existing.added += added
                 existing.removed += removed
                 existing.hunks.append(contentsOf: hunks)
+                // A file created then edited in the same turn is still "added".
+                if existing.status != .added { existing.status = status }
                 map[path] = existing
             } else {
-                map[path] = FileEdit(path: path, added: added, removed: removed, hunks: hunks)
+                map[path] = FileEdit(path: path, added: added, removed: removed, hunks: hunks, status: status)
                 order.append(path)
             }
         }
@@ -460,7 +460,7 @@ struct MessageBubble: View {
 
 }
 
-// MARK: - File Edit Pill (+ hover diff preview)
+// MARK: - Changed Files Card (+ per-file hover diff preview)
 
 /// A file touched by a turn's Edit/Write/MultiEdit tool calls, with rough
 /// added/removed line counts and the hunks needed to render/open its diff.
@@ -469,13 +469,84 @@ struct FileEdit: Identifiable {
     var added: Int
     var removed: Int
     var hunks: [PreviewFile.EditHunk]
+    var status: Status = .modified
     var id: String { path }
     var name: String { URL(fileURLWithPath: path).lastPathComponent }
+
+    /// Adopted from the AI Commit component's file-status indicators.
+    enum Status {
+        case added, modified
+
+        var label: String { self == .added ? "A" : "M" }
+
+        @MainActor var color: Color {
+            self == .added ? ClaudeTheme.statusSuccess : ClaudeTheme.statusWarning
+        }
+    }
 }
 
-/// Compact pill: file icon + name + `+adds`/`-removed`. Hover shows a diff
-/// preview popover; click opens the full diff.
-private struct FileEditPill: View {
+/// Collapsible card listing the files a turn changed — adapted from the AI
+/// Commit component. Header is a summary ("N files changed" + total +/-) that
+/// toggles a file list; each row shows status (A/M) · icon · path · +adds/-dels.
+private struct ChangedFilesCard: View {
+    let edits: [FileEdit]
+    let onOpen: (FileEdit) -> Void
+    @State private var isExpanded = false
+
+    private var totalAdded: Int { edits.reduce(0) { $0 + $1.added } }
+    private var totalRemoved: Int { edits.reduce(0) { $0 + $1.removed } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header — tap to expand/collapse the file list
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: ClaudeTheme.messageSize(9), weight: .semibold))
+                        .foregroundStyle(ClaudeTheme.textTertiary)
+                    Text("\(edits.count) file\(edits.count == 1 ? "" : "s") changed")
+                        .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
+                        .foregroundStyle(ClaudeTheme.textSecondary)
+                    Spacer(minLength: 8)
+                    if totalAdded > 0 {
+                        Text(verbatim: "+\(totalAdded)")
+                            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+                            .foregroundStyle(ClaudeTheme.statusSuccess)
+                    }
+                    if totalRemoved > 0 {
+                        Text(verbatim: "-\(totalRemoved)")
+                            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+                            .foregroundStyle(ClaudeTheme.statusError)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Rectangle()
+                    .fill(ClaudeTheme.border)
+                    .frame(height: 0.5)
+                VStack(spacing: 0) {
+                    ForEach(edits) { edit in
+                        ChangedFileRow(edit: edit) { onOpen(edit) }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        }
+        .background(ClaudeTheme.surfacePrimary, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(ClaudeTheme.border, lineWidth: 0.5))
+    }
+}
+
+/// One row in the changed-files list. Hover shows a diff preview popover;
+/// click opens the full diff.
+private struct ChangedFileRow: View {
     let edit: FileEdit
     let onOpen: () -> Void
     @State private var hovering = false
@@ -493,13 +564,20 @@ private struct FileEditPill: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
+                Text(edit.status.label)
+                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold, design: .monospaced))
+                    .foregroundStyle(edit.status.color)
+                    .frame(width: 12)
                 Image(systemName: icon)
                     .font(.system(size: ClaudeTheme.messageSize(10)))
-                    .foregroundStyle(ClaudeTheme.statusWarning)
+                    .foregroundStyle(ClaudeTheme.textTertiary)
                 Text(edit.name)
-                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium))
+                    .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
                     .foregroundStyle(ClaudeTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 8)
                 if edit.added > 0 {
                     Text(verbatim: "+\(edit.added)")
                         .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
@@ -511,16 +589,15 @@ private struct FileEditPill: View {
                         .foregroundStyle(ClaudeTheme.statusError)
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(ClaudeTheme.surfacePrimary, in: Capsule())
-            .overlay(Capsule().strokeBorder(ClaudeTheme.border, lineWidth: 0.5))
-            .contentShape(Capsule())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 3)
+            .background(hovering ? ClaudeTheme.surfaceSecondary.opacity(0.6) : .clear)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .pointerCursorOnHover()
         .onHover { hovering = $0 }
-        .popover(isPresented: $hovering, arrowEdge: .bottom) {
+        .popover(isPresented: $hovering, arrowEdge: .trailing) {
             EditDiffPreview(edit: edit)
         }
     }
@@ -586,43 +663,6 @@ private struct EditDiffPreview: View {
 }
 
 // MARK: - Flow Layout
-
-/// A simple wrapping layout: lays subviews left-to-right, wrapping to the next
-/// row when the proposed width is exceeded. Used for the file-edit pills.
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > maxWidth, x > 0 {
-                x = 0
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        return CGSize(width: maxWidth.isFinite ? maxWidth : x, height: y + rowHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x: CGFloat = bounds.minX, y: CGFloat = bounds.minY, rowHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-    }
-}
 
 private struct EmergeModifier: ViewModifier {
     let progress: Double
