@@ -505,7 +505,7 @@ struct InspectorPanel: View {
             // Drives the "Changes" tab badge. Reuses ChangesPaneView's git-status helper rather than
             // duplicating the plumbing; counts porcelain lines the same way the pane does.
             guard let cwd = workspaceCwd else { changedFileCount = 0; return }
-            let output = await ChangesPaneView.runGitStatus(cwd: cwd)
+            let output = await ChangesPaneView.runGit(cwd: cwd, args: ["status", "--porcelain"])
             changedFileCount = output.split(separator: "\n").filter { $0.count > 3 }.count
         }
         .task(id: "\(repoFullName ?? "")|\(prBranch ?? "")") {

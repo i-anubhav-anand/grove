@@ -19,6 +19,8 @@ struct ChangesPaneView: View {
         let id = UUID()
         let status: String
         let relativePath: String
+        var added: Int = 0
+        var deleted: Int = 0
         var name: String { URL(fileURLWithPath: relativePath).lastPathComponent }
         var folder: String { URL(fileURLWithPath: relativePath).deletingLastPathComponent().path }
     }
@@ -102,21 +104,46 @@ struct ChangesPaneView: View {
                 Text(badge(file.status))
                     .font(.system(size: ClaudeTheme.size(10), weight: .bold, design: .monospaced))
                     .foregroundStyle(color(file.status))
-                    .frame(width: 16, alignment: .leading)
+                    .frame(width: 14, alignment: .leading)
+                Image(systemName: icon(for: file.name))
+                    .font(.system(size: ClaudeTheme.size(11)))
+                    .foregroundStyle(ClaudeTheme.textTertiary)
                 Text(file.name)
                     .font(.system(size: ClaudeTheme.size(12)))
                     .lineLimit(1)
-                Spacer()
+                if file.added > 0 {
+                    Text(verbatim: "+\(file.added)")
+                        .font(.system(size: ClaudeTheme.size(10), design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.statusSuccess)
+                }
+                if file.deleted > 0 {
+                    Text(verbatim: "-\(file.deleted)")
+                        .font(.system(size: ClaudeTheme.size(10), design: .monospaced))
+                        .foregroundStyle(ClaudeTheme.statusError)
+                }
+                Spacer(minLength: 8)
                 if !groupByFolder, !file.folder.isEmpty {
                     Text(file.folder)
                         .font(.system(size: ClaudeTheme.size(10)))
                         .foregroundStyle(.tertiary)
                         .lineLimit(1)
+                        .layoutPriority(-1)
                 }
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    private func icon(for name: String) -> String {
+        switch (name as NSString).pathExtension.lowercased() {
+        case "swift":                                   return "swift"
+        case "md", "markdown", "txt", "rtf":            return "doc.text"
+        case "json", "yml", "yaml", "toml", "plist":    return "curlybraces"
+        case "sh", "bash", "zsh", "fish":               return "terminal"
+        case "png", "jpg", "jpeg", "gif", "svg", "pdf": return "photo"
+        default:                                        return "doc"
+        }
     }
 
     private struct FileGroup: Identifiable { let folder: String; let files: [ChangedFile]; var id: String { folder }; var label: String { folder.isEmpty ? "." : folder } }
@@ -152,15 +179,17 @@ struct ChangesPaneView: View {
 
     private func color(_ status: String) -> Color {
         let t = status.trimmingCharacters(in: .whitespaces)
-        if t.contains("D") { return ClaudeTheme.statusError }
-        if t == "??" || t.contains("A") { return ClaudeTheme.statusSuccess }
-        return ClaudeTheme.accent
+        if t.contains("D") { return ClaudeTheme.statusError }       // deleted → red
+        if t == "??" || t.contains("A") { return ClaudeTheme.statusSuccess } // added → green
+        if t.contains("R") { return .blue }                        // renamed → blue
+        return ClaudeTheme.statusWarning                           // modified → yellow
     }
 
     private func reload() async {
         guard let root = worktreePath else { files = []; return }
         loading = true
-        let output = await Self.runGitStatus(cwd: root)
+        let output = await Self.runGit(cwd: root, args: ["status", "--porcelain"])
+        let counts = await Self.runGitNumstat(cwd: root)  // tracked-file line changes vs HEAD
         files = output.split(separator: "\n").compactMap { raw in
             let line = String(raw)
             guard line.count > 3 else { return nil }
@@ -169,17 +198,31 @@ struct ChangesPaneView: View {
             if status.contains("R"), let arrow = path.range(of: " -> ") {
                 path = String(path[arrow.upperBound...])
             }
-            return ChangedFile(status: status, relativePath: path)
+            let (added, deleted) = counts[path] ?? (0, 0)
+            return ChangedFile(status: status, relativePath: path, added: added, deleted: deleted)
         }
         loading = false
     }
 
-    static func runGitStatus(cwd: String) async -> String {
+    /// Per-path (added, deleted) line counts for tracked changes vs HEAD.
+    /// Untracked files aren't in the diff, so they report zero (counts hidden).
+    static func runGitNumstat(cwd: String) async -> [String: (Int, Int)] {
+        let out = await runGit(cwd: cwd, args: ["diff", "--numstat", "HEAD"])
+        var map: [String: (Int, Int)] = [:]
+        for raw in out.split(separator: "\n") {
+            let parts = raw.split(separator: "\t", maxSplits: 2)
+            guard parts.count == 3, let added = Int(parts[0]), let deleted = Int(parts[1]) else { continue }
+            map[String(parts[2])] = (added, deleted)
+        }
+        return map
+    }
+
+    static func runGit(cwd: String, args: [String]) async -> String {
         await Task.detached {
             let proc = Process()
             let pipe = Pipe()
             proc.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-            proc.arguments = ["-C", cwd, "status", "--porcelain"]
+            proc.arguments = ["-C", cwd] + args
             proc.standardOutput = pipe
             proc.standardError = FileHandle.nullDevice
             guard (try? proc.run()) != nil else { return "" }
