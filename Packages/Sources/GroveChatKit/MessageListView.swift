@@ -188,14 +188,6 @@ struct MessageListView: View {
 
 // MARK: - Message Grouping Helpers
 
-/// Single-pass partition of messages into (settled, streaming) without scanning the array twice.
-fileprivate func partitionByStreaming(_ messages: [ChatMessage]) -> (settled: [ChatMessage], streaming: [ChatMessage]) {
-    var settled: [ChatMessage] = []
-    var streaming: [ChatMessage] = []
-    for m in messages { if m.isStreaming { streaming.append(m) } else { settled.append(m) } }
-    return (settled, streaming)
-}
-
 fileprivate struct MessageGroup: Identifiable {
     let id: UUID
     let messages: [ChatMessage]
@@ -307,20 +299,16 @@ struct StreamingMessageView: View {
 
     var body: some View {
         let messages = chatBridge.messages
-        let activeMessages = activeResponseMessages(from: messages)
-        let (settledActive, streamingActive) = partitionByStreaming(activeMessages)
+        let isActive = !activeResponseMessages(from: messages).isEmpty
         Group {
-            if !activeMessages.isEmpty {
-
-                ForEach(settledActive, id: \.id) { message in
-                    MessageBubble(message: message)
-                        .id(message.id)
-                }
-
-                ForEach(streamingActive, id: \.id) { message in
-                    MessageBubble(message: message)
-                        .id(message.id)
-                }
+            if isActive {
+                // While a turn is in flight we don't render the intermediate
+                // thinking/tool/text — just a compact running indicator. The full
+                // response renders at once when the turn settles, for a smoother
+                // load. (The user's own message is already in the settled list.)
+                RunningIndicator()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
             }
         }
         .onChange(of: messages.count) { _, _ in
@@ -336,6 +324,32 @@ struct StreamingMessageView: View {
     private func activeResponseMessages(from messages: [ChatMessage]) -> [ChatMessage] {
         guard messages.last?.isStreaming == true else { return [] }
         return Array(messages[streamingBoundaryIndex(in: messages)...])
+    }
+}
+
+// MARK: - Running Indicator
+
+/// Compact "session is running" indicator shown at the bottom while a turn is in
+/// flight. Reuses ChatMarker's shimmer (the same shading used for thinking) and
+/// shows live elapsed time.
+struct RunningIndicator: View {
+    @Environment(ChatBridge.self) private var chatBridge
+    @State private var now = Date()
+    private let ticker = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        ChatMarker(isRunning: true, label: elapsedLabel)
+            .onReceive(ticker) { now = $0 }
+    }
+
+    private var elapsedLabel: String {
+        guard let start = chatBridge.streamingStartDate else { return "Running" }
+        let t = max(0, now.timeIntervalSince(start))
+        let minutes = Int(t) / 60
+        let seconds = t - Double(minutes * 60)
+        return minutes > 0
+            ? String(format: "%dm, %.1fs", minutes, seconds)
+            : String(format: "%.1fs", seconds)
     }
 }
 
