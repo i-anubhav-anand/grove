@@ -35,7 +35,7 @@ struct ChatMarker: View {
                 .overlay(isRunning ? shimmerOverlay : nil)
 
             if let preview, !preview.isEmpty {
-                Text(preview)
+                Text(inlinePreview(preview))
                     .font(.system(size: ClaudeTheme.messageSize(11)))
                     .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.9))
                     .lineLimit(1)
@@ -61,6 +61,20 @@ struct ChatMarker: View {
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.12)) { isHovered = hovering }
         }
+    }
+
+    /// Render the preview snippet as inline markdown so emphasis/code show and the
+    /// raw syntax markers don't. Strips a single leading block marker (#, >, bullet)
+    /// so a heading/quote first line reads cleanly in the pill.
+    private func inlinePreview(_ raw: String) -> AttributedString {
+        var s = raw.trimmingCharacters(in: .whitespaces)
+        if s.hasPrefix("#") {
+            s = String(s.drop(while: { $0 == "#" })).trimmingCharacters(in: .whitespaces)
+        } else if s.hasPrefix("> ") || s.hasPrefix("- ") || s.hasPrefix("* ") {
+            s = String(s.dropFirst(2))
+        }
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: s, options: options)) ?? AttributedString(s)
     }
 
     // Sweeping shimmer: a bright band moves left→right over the text.
