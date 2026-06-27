@@ -411,10 +411,17 @@ func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
 /// hover highlight; clicking expands an inline scrollable content card.
 struct PlainActivityRow: View {
     @Environment(ChatBridge.self) private var chatBridge
+    @Environment(WindowState.self) private var windowState
     let item: ActivityItem
     var isMessageStreaming: Bool = false
     @State private var isExpanded = false
     @State private var isContentExpanded = false
+
+    /// An edit/write tool call rendered as a rich file row (chip + diff + hover).
+    private var fileEdit: FileEdit? {
+        guard case .toolCall(let tc) = item else { return nil }
+        return FileEdit(toolCall: tc)
+    }
 
     /// The subagent run behind an Agent/Task tool call, if its steps were recorded.
     private var subagentRun: SubagentRun? {
@@ -435,6 +442,18 @@ struct PlainActivityRow: View {
     }
 
     var body: some View {
+        if let edit = fileEdit {
+            // Edits render as rich file rows (chip + diff stats + hover preview)
+            // everywhere — including the settled-turn dropdown, not just live.
+            ChangedFileRow(edit: edit) {
+                windowState.diffFile = PreviewFile(path: edit.path, name: edit.name, editHunks: edit.hunks)
+            }
+        } else {
+            markerBody
+        }
+    }
+
+    private var markerBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Marker header — tap to expand when there's detail to show
             ChatMarker(

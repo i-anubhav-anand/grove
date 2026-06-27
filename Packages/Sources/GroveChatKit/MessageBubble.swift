@@ -413,52 +413,22 @@ struct MessageBubble: View {
 
     // MARK: - File Edit Pills
 
-    private func lineCount(_ s: String) -> Int {
-        s.isEmpty ? 0 : s.components(separatedBy: "\n").count
-    }
-
     /// Aggregate every file-modifying tool call in the message by file path.
     private var fileEdits: [FileEdit] {
         var map: [String: FileEdit] = [:]
         var order: [String] = []
         for block in message.blocks {
-            guard let tc = block.toolCall,
-                  let path = tc.input["file_path"]?.stringValue else { continue }
-            var added = 0, removed = 0
-            var hunks: [PreviewFile.EditHunk] = []
-            var status: FileEdit.Status = .modified
-            switch tc.name.lowercased() {
-            case "write":
-                let content = tc.input["content"]?.stringValue ?? ""
-                added = lineCount(content)
-                hunks = [PreviewFile.EditHunk(oldString: "", newString: content)]
-                status = .added
-            case "edit":
-                let old = tc.input["old_string"]?.stringValue ?? ""
-                let new = tc.input["new_string"]?.stringValue ?? ""
-                removed = lineCount(old); added = lineCount(new)
-                hunks = [PreviewFile.EditHunk(oldString: old, newString: new)]
-            case "multiedit", "multi_edit":
-                for entry in tc.input["edits"]?.arrayValue ?? [] {
-                    guard let obj = entry.objectValue else { continue }
-                    let old = obj["old_string"]?.stringValue ?? ""
-                    let new = obj["new_string"]?.stringValue ?? ""
-                    removed += lineCount(old); added += lineCount(new)
-                    hunks.append(PreviewFile.EditHunk(oldString: old, newString: new))
-                }
-            default:
-                continue
-            }
-            if var existing = map[path] {
-                existing.added += added
-                existing.removed += removed
-                existing.hunks.append(contentsOf: hunks)
+            guard let tc = block.toolCall, let edit = FileEdit(toolCall: tc) else { continue }
+            if var existing = map[edit.path] {
+                existing.added += edit.added
+                existing.removed += edit.removed
+                existing.hunks.append(contentsOf: edit.hunks)
                 // A file created then edited in the same turn is still "added".
-                if existing.status != .added { existing.status = status }
-                map[path] = existing
+                if existing.status != .added { existing.status = edit.status }
+                map[edit.path] = existing
             } else {
-                map[path] = FileEdit(path: path, added: added, removed: removed, hunks: hunks, status: status)
-                order.append(path)
+                map[edit.path] = edit
+                order.append(edit.path)
             }
         }
         return order.compactMap { map[$0] }
@@ -485,6 +455,42 @@ struct FileEdit: Identifiable {
     }
 }
 
+extension FileEdit {
+    /// Build a single FileEdit from one Edit/Write/MultiEdit tool call.
+    /// Returns nil for any other tool. Used by both the message summary and the
+    /// settled-turn dropdown so edits render identically everywhere.
+    init?(toolCall tc: ToolCall) {
+        guard let path = tc.input["file_path"]?.stringValue else { return nil }
+        func lines(_ s: String) -> Int { s.isEmpty ? 0 : s.components(separatedBy: "\n").count }
+        var added = 0, removed = 0
+        var hunks: [PreviewFile.EditHunk] = []
+        var status: Status = .modified
+        switch tc.name.lowercased() {
+        case "write":
+            let content = tc.input["content"]?.stringValue ?? ""
+            added = lines(content)
+            hunks = [PreviewFile.EditHunk(oldString: "", newString: content)]
+            status = .added
+        case "edit":
+            let old = tc.input["old_string"]?.stringValue ?? ""
+            let new = tc.input["new_string"]?.stringValue ?? ""
+            removed = lines(old); added = lines(new)
+            hunks = [PreviewFile.EditHunk(oldString: old, newString: new)]
+        case "multiedit", "multi_edit":
+            for entry in tc.input["edits"]?.arrayValue ?? [] {
+                guard let obj = entry.objectValue else { continue }
+                let old = obj["old_string"]?.stringValue ?? ""
+                let new = obj["new_string"]?.stringValue ?? ""
+                removed += lines(old); added += lines(new)
+                hunks.append(PreviewFile.EditHunk(oldString: old, newString: new))
+            }
+        default:
+            return nil
+        }
+        self.init(path: path, added: added, removed: removed, hunks: hunks, status: status)
+    }
+}
+
 /// The files a turn changed, rendered as inline activity-marker rows.
 private struct ChangedFilesCard: View {
     let edits: [FileEdit]
@@ -502,7 +508,7 @@ private struct ChangedFilesCard: View {
 /// One changed file, rendered like the activity markers: action icon + label +
 /// a greyish filename chip + diff stats. Click opens the full diff; hover shows
 /// a quick preview.
-private struct ChangedFileRow: View {
+struct ChangedFileRow: View {
     let edit: FileEdit
     let onOpen: () -> Void
     @State private var fileHovered = false
