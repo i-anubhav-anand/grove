@@ -330,70 +330,61 @@ func activityItems(from messages: [ChatMessage]) -> [ActivityItem] {
 /// hover highlight; clicking expands an inline scrollable content card.
 struct PlainActivityRow: View {
     let item: ActivityItem
+    var isMessageStreaming: Bool = false
     @State private var isExpanded = false
-    @State private var isHovered = false
     @State private var isContentExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            rowHeader
+        VStack(alignment: .leading, spacing: 0) {
+            // Marker header — tap to expand when there's detail to show
+            ChatMarker(
+                icon: markerIcon,
+                isRunning: isRunning,
+                label: markerLabel
+            )
+            .contentShape(Rectangle())
+            .onTapGesture {
+                guard hasExpandableContent else { return }
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+            }
+
             if isExpanded {
-                rowContent.padding(.leading, 20)
+                rowContent
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
             }
         }
     }
 
-    // MARK: Header
+    // MARK: Marker props
 
-    private var rowHeader: some View {
-        HStack(spacing: 6) {
-            rowIcon
-                .font(.system(size: ClaudeTheme.messageSize(11)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .frame(width: 14, alignment: .leading)
-            rowLabel
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 2)
-        .padding(.horizontal, 4)
-        .background(
-            isHovered ? ClaudeTheme.surfacePrimary.opacity(0.5) : Color.clear,
-            in: RoundedRectangle(cornerRadius: 4)
-        )
-        .contentShape(Rectangle())
-        .onHover { isHovered = $0 }
-        .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }
-    }
-
-    @ViewBuilder
-    private var rowIcon: some View {
-        if isHovered {
-            Image(systemName: isExpanded ? "minus" : "plus")
-        } else if case .thinking = item {
-            Image(systemName: "brain")
-        } else if case .toolCall(let tc) = item {
-            Image(systemName: symbol(for: tc.name.lowercased()))
+    private var isRunning: Bool {
+        switch item {
+        case .thinking: return isMessageStreaming
+        case .toolCall(let tc): return tc.result == nil && isMessageStreaming
         }
     }
 
-    @ViewBuilder
-    private var rowLabel: some View {
-        if case .thinking(_, let text, _) = item {
-            Text("Thinking")
-                .font(.system(size: ClaudeTheme.messageSize(12), weight: .medium))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .layoutPriority(1)
-            Text(text.prefix(100).replacingOccurrences(of: "\n", with: " "))
-                .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(ClaudeTheme.textTertiary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-        } else if case .toolCall(let tc) = item {
-            Text(label(for: tc))
-                .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
+    private var markerIcon: String? {
+        guard !isRunning else { return nil }
+        switch item {
+        case .thinking: return "brain"
+        case .toolCall(let tc): return symbol(for: tc.name.lowercased())
+        }
+    }
+
+    private var markerLabel: String {
+        switch item {
+        case .thinking: return isRunning ? "Thinking..." : "Thinking"
+        case .toolCall(let tc):
+            return isRunning ? runningLabel(for: tc) : label(for: tc)
+        }
+    }
+
+    private var hasExpandableContent: Bool {
+        switch item {
+        case .thinking(_, let text, _): return !text.isEmpty
+        case .toolCall(let tc): return tc.result != nil || tc.input["command"] != nil
         }
     }
 
@@ -509,6 +500,20 @@ struct PlainActivityRow: View {
     }
 
     // MARK: Label / symbol helpers
+
+    private func runningLabel(for tc: ToolCall) -> String {
+        let lower = tc.name.lowercased()
+        switch lower {
+        case "read":    return "Reading..."
+        case "bash":    return "Running..."
+        case "edit", "multiedit", "multi_edit": return "Editing..."
+        case "write":   return "Writing..."
+        case "grep":    return "Searching..."
+        case "glob":    return "Finding files..."
+        case "agent":   return "Spawning agent..."
+        default:        return "\(tc.name)..."
+        }
+    }
 
     private func label(for tc: ToolCall) -> String {
         let lower = tc.name.lowercased()
