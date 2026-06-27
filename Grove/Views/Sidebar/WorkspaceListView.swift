@@ -141,57 +141,38 @@ struct WorkspaceListView: View {
 
     // MARK: - Rows
 
-    /// One row per chat session. Shows the worktree's branch icon (PR-colored) and
-    /// diff stats when the session is backed by a worktree; click selects it.
     private func sessionRow(_ summary: ChatSession.Summary, project: Project) -> some View {
         let workspace = summary.workspaceId.flatMap { wid in appState.workspaces.first { $0.id == wid } }
         let isCurrent = appState.currentSession(in: windowState)?.id == summary.id
         let streaming = appState.isStreaming(summary.id)
-        return HStack(spacing: 8) {
-            if let ws = workspace {
-                Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(branchColor(ws))
-                    .help(prStateHelp(ws))
-            }
-            Text(summary.title)
-                .font(.system(size: ClaudeTheme.size(11), weight: isCurrent ? .medium : .regular))
-                .foregroundStyle(.primary.opacity(0.85))
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            if let ws = workspace, let d = appState.workspaceDiffStats[ws.id], !d.isEmpty {
-                HStack(spacing: 3) {
-                    Text("+\(d.added)").foregroundStyle(ClaudeTheme.statusSuccess)
-                    Text("-\(d.deleted)").foregroundStyle(ClaudeTheme.statusError)
-                }
-                .font(.system(size: ClaudeTheme.size(9), weight: .medium, design: .monospaced))
-            }
-            if streaming { ProgressView().controlSize(.mini) }
-            if summary.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: ClaudeTheme.size(8)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-            }
+        let prState = workspace.flatMap { appState.workspacePRStates[$0.id] }
+        let diffStat = workspace.flatMap { appState.workspaceDiffStats[$0.id] }
+        let status = workspace?.status ?? .inProgress
+
+        return SessionCardRow(
+            summary: summary,
+            workspace: workspace,
+            isCurrent: isCurrent,
+            isStreaming: streaming,
+            status: status,
+            prState: prState,
+            diffStat: diffStat
+        ) {
+            appState.selectSession(id: summary.id, in: windowState)
         }
-        .padding(.vertical, 2)
-        .padding(.horizontal, 4)
-        .contentShape(Rectangle())
-        .background(isCurrent ? ClaudeTheme.accent.opacity(0.15) : .clear,
-                    in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
-        .onTapGesture { appState.selectSession(id: summary.id, in: windowState) }
         .contextMenu {
             if let ws = workspace {
                 Button { archive(ws) } label: {
                     Label("Archive worktree", systemImage: "archivebox")
                 }
             }
-            Button(role: .destructive) {
-                pendingDeleteSession = summary
-            } label: {
+            Button(role: .destructive) { pendingDeleteSession = summary } label: {
                 Label("Delete session", systemImage: "trash")
             }
         }
-        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 8))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 3, leading: 8, bottom: 3, trailing: 8))
     }
 
     private var emptyState: some View {
@@ -256,5 +237,137 @@ struct WorkspaceListView: View {
         appState.allSessionSummaries
             .filter { $0.projectId == projectId }
             .sorted { ($0.isPinned ? 1 : 0, $0.updatedAt) > ($1.isPinned ? 1 : 0, $1.updatedAt) }
+    }
+}
+
+// MARK: - Session Card Row
+
+/// Card-style session row inspired by sortable list pattern:
+/// [status icon] | title + branch subtitle | [status badge] [diff stats]
+private struct SessionCardRow: View {
+    let summary: ChatSession.Summary
+    let workspace: Workspace?
+    let isCurrent: Bool
+    let isStreaming: Bool
+    let status: WorkspaceStatus
+    let prState: BranchPRState?
+    let diffStat: DiffStat?
+    let onTap: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+
+            // Status icon box
+            ZStack {
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(statusColor.opacity(0.15))
+                    .frame(width: 32, height: 32)
+                if isStreaming {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.75)
+                } else {
+                    Image(systemName: statusIcon)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(statusColor)
+                }
+            }
+
+            // Title + branch subtitle
+            VStack(alignment: .leading, spacing: 3) {
+                Text(summary.title)
+                    .font(.system(size: 13, weight: isCurrent ? .semibold : .medium))
+                    .foregroundStyle(ClaudeTheme.textPrimary)
+                    .lineLimit(1)
+
+                if let branch = workspace?.branch {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 9))
+                            .foregroundStyle(branchColor)
+                        Text(branch)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Right column: status badge + diff stats
+            VStack(alignment: .trailing, spacing: 4) {
+                // Status badge
+                Text(status.label)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(statusColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(statusColor.opacity(0.15), in: Capsule())
+
+                // Diff stats
+                if let d = diffStat, !d.isEmpty {
+                    HStack(spacing: 3) {
+                        Text("+\(d.added)")
+                            .foregroundStyle(ClaudeTheme.statusSuccess)
+                        Text("-\(d.deleted)")
+                            .foregroundStyle(ClaudeTheme.statusError)
+                    }
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(
+                    isCurrent
+                        ? ClaudeTheme.accent.opacity(0.1)
+                        : isHovered ? ClaudeTheme.surfacePrimary.opacity(0.7) : Color.clear
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(
+                    isCurrent
+                        ? ClaudeTheme.accent.opacity(0.35)
+                        : isHovered ? ClaudeTheme.border : Color.clear,
+                    lineWidth: 0.5
+                )
+        )
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
+        .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
+        .onTapGesture { onTap() }
+    }
+
+    private var statusColor: Color {
+        switch status {
+        case .backlog:    return ClaudeTheme.textTertiary
+        case .inProgress: return ClaudeTheme.accent
+        case .inReview:   return .orange
+        case .done:       return ClaudeTheme.statusSuccess
+        }
+    }
+
+    private var statusIcon: String {
+        switch status {
+        case .backlog:    return "clock"
+        case .inProgress: return "bolt.fill"
+        case .inReview:   return "eye.fill"
+        case .done:       return "checkmark"
+        }
+    }
+
+    private var branchColor: Color {
+        switch prState {
+        case .open:   return ClaudeTheme.statusSuccess
+        case .merged: return Color(red: 0.54, green: 0.34, blue: 0.90)
+        case .closed: return ClaudeTheme.statusError
+        case nil:     return ClaudeTheme.textTertiary
+        }
     }
 }
