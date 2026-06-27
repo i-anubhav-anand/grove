@@ -45,6 +45,11 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
 
             topAccessory
 
+            // Slash / @ popups sit in-flow directly above the composer. Rendering
+            // them here (rather than as an overlay shifted outside the bar's bounds)
+            // keeps real, hit-testable bounds so the list scrolls with the trackpad.
+            floatingPopups
+
             inputComposer
             .padding(.horizontal, 14)
             .padding(.top, 16)
@@ -65,34 +70,6 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
                 return true
             }
             .overlay { dragOverlay }
-        }
-        .overlay(alignment: .top) {
-            HStack(alignment: .top, spacing: 0) {
-                VStack(spacing: 4) {
-                    if showSlashPopup && !slashFilteredCommands.isEmpty {
-                        SlashCommandPopup(
-                            query: slashQuery,
-                            onSelect: { cmd in selectSlashCommand(cmd) },
-                            selectedIndex: $slashSelectedIndex
-                        )
-                        .transition(.offset(y: 10).combined(with: .opacity))
-                    }
-                    if showAtFilePopup && !atFileFilteredEntries.isEmpty {
-                        AtFilePopup(
-                            entries: atFileFilteredEntries,
-                            onSelect: { relativePath in selectAtFile(relativePath) },
-                            selectedIndex: $atFileSelectedIndex
-                        )
-                        .transition(.offset(y: 10).combined(with: .opacity))
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            }
-            .padding(.horizontal, 16)
-            .offset(y: -4)
-            // Show floating popups above the input bar by mapping top guide to bottom.
-            .alignmentGuide(.top) { $0[.bottom] }
         }
         .onChange(of: windowState.requestInputFocus) { _, newValue in
             if newValue {
@@ -136,6 +113,33 @@ struct InputBarView<Accessory: View, TopAccessory: View>: View {
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .onTapGesture { inputFocusTrigger = UUID() }
+    }
+
+    // MARK: - Floating Popups (slash commands / @ file search)
+
+    @ViewBuilder
+    private var floatingPopups: some View {
+        VStack(spacing: 4) {
+            if showSlashPopup && !slashFilteredCommands.isEmpty {
+                SlashCommandPopup(
+                    query: slashQuery,
+                    onSelect: { cmd in selectSlashCommand(cmd) },
+                    selectedIndex: $slashSelectedIndex
+                )
+                .transition(.offset(y: 10).combined(with: .opacity))
+            }
+            if showAtFilePopup && !atFileFilteredEntries.isEmpty {
+                AtFilePopup(
+                    entries: atFileFilteredEntries,
+                    onSelect: { relativePath in selectAtFile(relativePath) },
+                    selectedIndex: $atFileSelectedIndex
+                )
+                .transition(.offset(y: 10).combined(with: .opacity))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
     }
 
     // MARK: - Input Composer
