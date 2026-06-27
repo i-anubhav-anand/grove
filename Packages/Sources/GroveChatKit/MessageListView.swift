@@ -424,13 +424,14 @@ struct PlainActivityRow: View {
     }
 
     /// A one-line greyish preview of a thinking block, shown next to "Thinking".
-    /// Returns the first non-empty line; truncation is handled at render time via
-    /// lineLimit so inline markdown isn't cut mid-token.
+    /// Hard-capped at a fixed length with an ellipsis so it never grows long.
     private var thinkingPreview: String? {
         guard case .thinking(_, let text, _) = item else { return nil }
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return nil }
-        return t.split(separator: "\n").first.map(String.init)
+        let firstLine = t.split(separator: "\n").first.map(String.init) ?? t
+        let limit = 72
+        return firstLine.count > limit ? String(firstLine.prefix(limit)) + "…" : firstLine
     }
 
     var body: some View {

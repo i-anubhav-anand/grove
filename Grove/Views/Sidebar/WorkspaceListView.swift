@@ -20,6 +20,8 @@ struct WorkspaceListView: View {
                 newProjectMenu
                     .padding(.horizontal, 10)
                     .padding(.top, 8)
+                    .padding(.bottom, 8)
+                ClaudeThemeDivider()
             }
             if visibleProjects.isEmpty {
                 emptyState
@@ -56,13 +58,14 @@ struct WorkspaceListView: View {
                     }
                     .padding(.vertical, 8)
                 }
-                // Scroll-fade: fades top and bottom edges like `scroll-fade` CSS class
+                // Scroll-fade: only the bottom edge fades. The top stays fully
+                // opaque so the first project header isn't dimmed/"blurry".
                 .mask(
                     LinearGradient(
                         stops: [
-                            .init(color: .clear,  location: 0.00),
-                            .init(color: .black,  location: 0.06),
+                            .init(color: .black,  location: 0.00),
                             .init(color: .black,  location: 0.94),
+                            .init(color: .clear,  location: 1.00),
                             .init(color: .clear,  location: 1.00),
                         ],
                         startPoint: .top,
