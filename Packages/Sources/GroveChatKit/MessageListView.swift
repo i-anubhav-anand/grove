@@ -12,24 +12,10 @@ struct MessageListView: View {
     @State private var isNearBottom = true
     @State private var isSessionReady = false
 
-    private let foldThreshold = 30
-
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                // Show all messages with a scroll icon divider at the threshold
-                if settledItems.count > foldThreshold {
-                    let hiddenCount = settledItems.count - foldThreshold
-                    messageRows(settledItems.prefix(hiddenCount))
-                    Image(systemName: "line.3.horizontal")
-                        .font(.system(size: ClaudeTheme.size(13), weight: .medium))
-                        .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.4))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                    messageRows(settledItems.suffix(foldThreshold))
-                } else {
-                    messageRows(settledItems[...])
-                }
+                messageRows(settledItems[...])
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
