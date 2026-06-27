@@ -299,13 +299,13 @@ struct StreamingMessageView: View {
 
     var body: some View {
         let messages = chatBridge.messages
-        let activeMessages = activeResponseMessages(from: messages)
+        let display = completedTurnMessages(from: messages)
         Group {
-            if !activeMessages.isEmpty {
-                // Render the in-flight turn incrementally — each step (thinking,
-                // tool, text) appears as it streams in — and keep a running timer
-                // pinned at the bottom so progress is always visible.
-                ForEach(activeMessages, id: \.id) { message in
+            if chatBridge.isStreaming {
+                // Don't render the in-progress step in real time. Show each step
+                // only once it's complete (it "pops up" done), and keep a running
+                // timer pinned below so progress is always visible.
+                ForEach(display, id: \.id) { message in
                     MessageBubble(message: message)
                         .id(message.id)
                 }
@@ -327,6 +327,28 @@ struct StreamingMessageView: View {
     private func activeResponseMessages(from messages: [ChatMessage]) -> [ChatMessage] {
         guard messages.last?.isStreaming == true else { return [] }
         return Array(messages[streamingBoundaryIndex(in: messages)...])
+    }
+
+    /// The in-flight turn with only *completed* steps. The trailing block of the
+    /// streaming message (the one being generated right now) is dropped so nothing
+    /// renders token-by-token — each step appears only once it's done.
+    private func completedTurnMessages(from messages: [ChatMessage]) -> [ChatMessage] {
+        var active = activeResponseMessages(from: messages)
+        guard let lastIdx = active.indices.last else { return [] }
+
+        var last = active[lastIdx]
+        if last.isStreaming, let tail = last.blocks.last {
+            let tailInProgress: Bool
+            if let tc = tail.toolCall {
+                tailInProgress = tc.result == nil && !tc.isError   // tool still running
+            } else {
+                tailInProgress = true                              // text/thinking being written
+            }
+            if tailInProgress { last.blocks.removeLast() }
+        }
+        last.isStreaming = false   // render the kept blocks as finished (no cursor)
+        active[lastIdx] = last
+        return active.filter { !$0.blocks.isEmpty }
     }
 }
 
