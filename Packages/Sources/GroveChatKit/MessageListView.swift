@@ -503,10 +503,7 @@ struct PlainActivityRow: View {
         if let run = subagentRun {
             AgentStepsView(run: run)
         } else if case .thinking(_, let text, _) = item {
-            Text(text)
-                .font(.system(size: ClaudeTheme.messageSize(12)))
-                .foregroundStyle(ClaudeTheme.textSecondary)
-                .textSelection(.enabled)
+            MarkdownContentView(text: text)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if case .toolCall(let tc) = item {
             toolContent(tc)
