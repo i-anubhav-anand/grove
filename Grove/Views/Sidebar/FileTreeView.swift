@@ -138,7 +138,7 @@ struct FileTreeView: View {
                                 .padding(.vertical, 4)
 
                             ForEach(results) { file in
-                                SearchResultRow(node: file, searchText: searchText, onFileSelect: { node in
+                                SearchResultRow(node: file, searchText: searchText, selectedPath: windowState.inspectorFile?.path, onFileSelect: { node in
                                     windowState.inspectorFile = PreviewFile(path: node.id, name: node.name)
                                 }, onAddPath: { node in
                                     addPathToInput(node)
@@ -149,7 +149,7 @@ struct FileTreeView: View {
                 } else {
                     treeScrollView {
                         ForEach(root.children) { child in
-                            FileNodeRow(node: child, depth: 0, onFileSelect: { node in
+                            FileNodeRow(node: child, depth: 0, selectedPath: windowState.inspectorFile?.path, onFileSelect: { node in
                                 windowState.inspectorFile = PreviewFile(path: node.id, name: node.name)
                             }, onAddPath: { node in
                                 addPathToInput(node)
@@ -207,8 +207,9 @@ struct FileTreeView: View {
     @ViewBuilder
     private func treeScrollView<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0, content: content)
+            LazyVStack(alignment: .leading, spacing: 1, content: content)
                 .padding(.vertical, 4)
+                .padding(.horizontal, 6)
         }
     }
 
@@ -227,33 +228,40 @@ private struct TreeScanKey: Equatable {
 private struct FileNodeRow: View {
     let node: FileNode
     let depth: Int
+    let selectedPath: String?
     let onFileSelect: (FileNode) -> Void
     let onAddPath: (FileNode) -> Void
     @State private var isExpanded = false
     @State private var isHovered = false
 
+    /// Per-level indent (the tree's `--tree-indent`).
+    private static let indent: CGFloat = 14
+
+    private var isSelected: Bool { !node.isDirectory && selectedPath == node.id }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 1) {
             Button {
                 if node.isDirectory {
-                    isExpanded.toggle()
+                    withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
                 } else {
                     onFileSelect(node)
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Spacer()
-                        .frame(width: CGFloat(depth) * 16)
-
-                    if node.isDirectory {
-                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                            .font(.system(size: ClaudeTheme.size(8)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                            .frame(width: 10)
-                    } else {
-                        Spacer()
-                            .frame(width: 10)
+                HStack(spacing: 5) {
+                    // Single rotating chevron for folders; a matching blank for files
+                    // so their icons line up under the folder labels (shadcn `ps-7`).
+                    Group {
+                        if node.isDirectory {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                                .foregroundStyle(ClaudeTheme.textTertiary)
+                                .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                        } else {
+                            Color.clear
+                        }
                     }
+                    .frame(width: 12, height: 12)
 
                     Image(systemName: node.icon)
                         .font(.system(size: ClaudeTheme.size(12)))
@@ -262,27 +270,26 @@ private struct FileNodeRow: View {
 
                     Text(node.name)
                         .font(.system(size: ClaudeTheme.size(13), design: node.isDirectory ? .default : .monospaced))
-                        .foregroundStyle(node.isDirectory ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary)
+                        .foregroundStyle(labelColor)
                         .lineLimit(1)
 
-                    if node.isDirectory {
-                        Text("\(node.children.count)")
-                            .font(.system(size: ClaudeTheme.size(9)))
-                            .foregroundStyle(ClaudeTheme.textTertiary)
-                            .padding(.horizontal, 4)
-                    }
+                    Spacer(minLength: 4)
 
-                    Spacer()
-                        .frame(width: 8)
+                    if node.isDirectory && !node.children.isEmpty {
+                        Text("\(node.children.count)")
+                            .font(.system(size: ClaudeTheme.size(10)))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                    }
                 }
-                .padding(.vertical, 3)
-                .padding(.horizontal, 8)
-                .background(isHovered && !node.isDirectory ? ClaudeTheme.sidebarItemHover : .clear)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(rowBackground, in: RoundedRectangle(cornerRadius: 5))
                 .contentShape(Rectangle())
+                .padding(.leading, CGFloat(depth) * Self.indent)
             }
             .buttonStyle(.plain)
-            .onHover { hovering in isHovered = hovering }
+            .onHover { isHovered = $0 }
             .contextMenu {
                 if !node.isDirectory {
                     Button {
@@ -300,10 +307,21 @@ private struct FileNodeRow: View {
 
             if isExpanded {
                 ForEach(node.children) { child in
-                    FileNodeRow(node: child, depth: depth + 1, onFileSelect: onFileSelect, onAddPath: onAddPath)
+                    FileNodeRow(node: child, depth: depth + 1, selectedPath: selectedPath, onFileSelect: onFileSelect, onAddPath: onAddPath)
                 }
             }
         }
+    }
+
+    private var rowBackground: Color {
+        if isSelected { return ClaudeTheme.accent.opacity(0.18) }
+        if isHovered { return ClaudeTheme.sidebarItemHover }
+        return .clear
+    }
+
+    private var labelColor: Color {
+        if isSelected { return ClaudeTheme.textPrimary }
+        return node.isDirectory ? ClaudeTheme.textPrimary : ClaudeTheme.textSecondary
     }
 }
 
@@ -312,9 +330,12 @@ private struct FileNodeRow: View {
 private struct SearchResultRow: View {
     let node: FileNode
     let searchText: String
+    let selectedPath: String?
     let onFileSelect: (FileNode) -> Void
     let onAddPath: (FileNode) -> Void
     @State private var isHovered = false
+
+    private var isSelected: Bool { selectedPath == node.id }
 
     /// Extracts the parent folder name from the file path
     private var parentFolder: String {
@@ -347,9 +368,10 @@ private struct SearchResultRow: View {
                 Spacer()
             }
             .padding(.vertical, 4)
-            .padding(.horizontal, 12)
-            .background(isHovered ? ClaudeTheme.sidebarItemHover : .clear)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(searchRowBackground, in: RoundedRectangle(cornerRadius: 5))
+            .padding(.horizontal, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -366,6 +388,12 @@ private struct SearchResultRow: View {
                 Label("Show in Finder", systemImage: "folder")
             }
         }
+    }
+
+    private var searchRowBackground: Color {
+        if isSelected { return ClaudeTheme.accent.opacity(0.18) }
+        if isHovered { return ClaudeTheme.sidebarItemHover }
+        return .clear
     }
 }
 
