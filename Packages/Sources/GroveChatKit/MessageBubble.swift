@@ -109,21 +109,12 @@ struct MessageBubble: View {
             if toolCall.name == "AskUserQuestion" {
                 AskUserQuestionView(toolCall: toolCall)
             } else {
-                PlainActivityRow(item: .toolCall(toolCall), isMessageStreaming: message.isStreaming, isExpanded: expansionBinding(toolCall.id))
+                PlainActivityRow(item: .toolCall(toolCall), isMessageStreaming: message.isStreaming, isExpanded: $expandedBlocks.contains(toolCall.id))
             }
         }
         if block.isThinking, let text = block.thinking, !text.isEmpty {
-            PlainActivityRow(item: .thinking(id: block.id, text: text, duration: block.thinkingDuration), isMessageStreaming: message.isStreaming, isExpanded: expansionBinding(block.id))
+            PlainActivityRow(item: .thinking(id: block.id, text: text, duration: block.thinkingDuration), isMessageStreaming: message.isStreaming, isExpanded: $expandedBlocks.contains(block.id))
         }
-    }
-
-    private func expansionBinding(_ id: String) -> Binding<Bool> {
-        Binding(
-            get: { expandedBlocks.contains(id) },
-            set: { isOn in
-                if isOn { expandedBlocks.insert(id) } else { expandedBlocks.remove(id) }
-            }
-        )
     }
 
     // MARK: - Compact Boundary Bubble

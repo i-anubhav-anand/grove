@@ -1,6 +1,8 @@
 import SwiftUI
 import GroveCore
 
+// Test comment — throwaway line to exercise the commit/diff flow.
+
 struct ToolResultView: View {
     let toolCall: ToolCall
     var isMessageStreaming: Bool = false
@@ -360,18 +362,7 @@ struct ToolResultView: View {
     private var primaryLabel: String {
         if toolNameLower == "agent" { return agentDisplayTitle }
         if let skillName { return "Skill — \(skillName)" }
-        if isBashTool {
-            // On error, show the first line of the error inline; otherwise the
-            // command itself, terminal-prompt style.
-            if toolCall.isError, let result = toolCall.result {
-                let line = firstNonEmptyLine(result)
-                return line.isEmpty ? "Error" : "Error  \(line)"
-            }
-            if let cmd = bashCommand {
-                let trimmed = cmd.trimmingCharacters(in: .whitespacesAndNewlines)
-                return ">. " + String(trimmed.prefix(70))
-            }
-        }
+        if isBashTool { return bashRowLabel(toolCall) }
         return inputSummary
     }
 

@@ -2,6 +2,8 @@ import SwiftUI
 import Combine
 import GroveCore
 
+// Test comment — throwaway line to exercise the commit/diff flow.
+
 /// Message scroll area — extracted from ChatView to isolate @Observable dependencies on `messages`.
 struct MessageListView: View {
     @Environment(ChatBridge.self) private var chatBridge
@@ -415,6 +417,33 @@ func firstNonEmptyLine(_ s: String, max: Int = 80) -> String {
     return ""
 }
 
+/// Header label for a bash tool call: the first error line on failure, else the
+/// command itself behind a terminal-prompt prefix.
+func bashRowLabel(_ tc: ToolCall) -> String {
+    if tc.isError, let result = tc.result {
+        let line = firstNonEmptyLine(result)
+        return line.isEmpty ? "Error" : "Error  \(line)"
+    }
+    if let cmd = tc.input["command"]?.stringValue {
+        return ">. " + String(cmd.trimmingCharacters(in: .whitespacesAndNewlines).prefix(70))
+    }
+    return ">. "
+}
+
+extension Binding where Value == Set<String> {
+    /// A `Bool` binding for set membership — toggling it inserts/removes `id`.
+    /// Lets a parent hold one `Set` of expanded row ids and hand each row a
+    /// stable binding keyed by its id.
+    func contains(_ id: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { wrappedValue.contains(id) },
+            set: { isOn in
+                if isOn { wrappedValue.insert(id) } else { wrappedValue.remove(id) }
+            }
+        )
+    }
+}
+
 // MARK: - Plain Activity Row
 
 /// Card-free row for the activity summary list. The row is plain text with a
@@ -678,17 +707,7 @@ struct PlainActivityRow: View {
             }
             return name.isEmpty ? "Read" : "Read — \(name)"
         case "bash":
-            // On error, surface the first line of the error inline so it's
-            // readable without expanding the row.
-            if tc.isError, let result = tc.result {
-                let line = firstNonEmptyLine(result)
-                return line.isEmpty ? "Error" : "Error  \(line)"
-            }
-            if let cmd = tc.input["command"]?.stringValue {
-                let trimmed = cmd.trimmingCharacters(in: .whitespacesAndNewlines)
-                return ">. " + String(trimmed.prefix(70))
-            }
-            return ">. "
+            return bashRowLabel(tc)
         case "edit", "multiedit", "multi_edit":
             if let path = tc.input["file_path"]?.stringValue {
                 return "Edit — \(URL(fileURLWithPath: path).lastPathComponent)"
@@ -770,21 +789,12 @@ struct TurnActivitySummaryView: View {
                 if isExpanded {
                     let items = activityItems(from: messages)
                     ForEach(items) { item in
-                        PlainActivityRow(item: item, isExpanded: binding(for: item.id))
+                        PlainActivityRow(item: item, isExpanded: $expandedItems.contains(item.id))
                     }
                 }
             }
             Spacer(minLength: 40)
         }
-    }
-
-    private func binding(for id: String) -> Binding<Bool> {
-        Binding(
-            get: { expandedItems.contains(id) },
-            set: { isOn in
-                if isOn { expandedItems.insert(id) } else { expandedItems.remove(id) }
-            }
-        )
     }
 }
 
