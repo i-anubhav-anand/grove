@@ -592,17 +592,11 @@ private struct MarkdownTableView: View {
                         cellView(text: header, isHeader: true, colIndex: colIndex)
                     }
                 }
-                .background(ClaudeTheme.surfaceTertiary)
+                .background(ClaudeTheme.surfaceSecondary)
 
-                // Separator
-                GridRow {
-                    Rectangle()
-                        .fill(ClaudeTheme.border)
-                        .frame(height: 1)
-                        .gridCellColumns(headers.count)
-                }
+                rowSeparator(opacity: 1.0)
 
-                // Data rows
+                // Data rows, each followed by a hairline separator (except the last).
                 ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                     GridRow {
                         ForEach(Array(headers.indices), id: \.self) { colIndex in
@@ -610,7 +604,11 @@ private struct MarkdownTableView: View {
                             cellView(text: text, isHeader: false, colIndex: colIndex)
                         }
                     }
-                    .background(rowIndex % 2 == 0 ? Color.clear : ClaudeTheme.surfaceTertiary.opacity(0.4))
+                    .background(rowIndex % 2 == 0 ? Color.clear : ClaudeTheme.surfaceTertiary.opacity(0.25))
+
+                    if rowIndex < rows.count - 1 {
+                        rowSeparator(opacity: 0.5)
+                    }
                 }
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -624,17 +622,27 @@ private struct MarkdownTableView: View {
         .padding(.vertical, 4)
     }
 
+    private func rowSeparator(opacity: Double) -> some View {
+        GridRow {
+            Rectangle()
+                .fill(ClaudeTheme.border.opacity(opacity))
+                .frame(height: 0.5)
+                .gridCellColumns(headers.count)
+        }
+    }
+
     private func cellView(text: String, isHeader: Bool, colIndex: Int) -> some View {
         Text(parseInlineMarkdown(text))
-            .font(.system(size: ClaudeTheme.messageSize(14), weight: isHeader ? .semibold : .regular))
-            .foregroundStyle(ClaudeTheme.textPrimary)
+            .font(.system(size: ClaudeTheme.messageSize(isHeader ? 12 : 13),
+                          weight: isHeader ? .semibold : .regular))
+            .foregroundStyle(isHeader ? ClaudeTheme.textSecondary : ClaudeTheme.textPrimary)
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, isHeader ? 7 : 8)
             .frame(minWidth: 80, maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .overlay(alignment: .leading) {
                 if colIndex > 0 {
                     Rectangle()
-                        .fill(Color.primary.opacity(0.12))
+                        .fill(ClaudeTheme.border.opacity(0.5))
                         .frame(width: 0.5)
                 }
             }
