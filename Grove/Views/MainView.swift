@@ -359,13 +359,12 @@ struct InspectorTabControl: View {
                         .foregroundStyle(isSelected ? ClaudeTheme.textOnAccent : ClaudeTheme.textSecondary)
                         .background(
                             isSelected ? ClaudeTheme.accent : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 6)
+                            in: RoundedRectangle(cornerRadius: 8)
                         )
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .background(ClaudeTheme.surfaceSecondary, in: RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))
         }
         .scrollIndicators(.hidden)
     }
