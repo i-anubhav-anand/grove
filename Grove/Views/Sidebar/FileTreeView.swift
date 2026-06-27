@@ -234,13 +234,16 @@ private struct FileNodeRow: View {
     @State private var isExpanded = false
     @State private var isHovered = false
 
-    /// Per-level indent (the tree's `--tree-indent`).
-    private static let indent: CGFloat = 14
+    /// Per-level indent (the tree's `--tree-indent: 20px`).
+    private static let indent: CGFloat = 20
+    /// Chevron column width (`size-4` = 16px) + `gap-1` (4px).
+    private static let chevronSlot: CGFloat = 16
 
     private var isSelected: Bool { !node.isDirectory && selectedPath == node.id }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
+        // not-last:pb-0.5 → 2px gap between sibling rows
+        VStack(alignment: .leading, spacing: 2) {
             Button {
                 if node.isDirectory {
                     withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
@@ -248,20 +251,20 @@ private struct FileNodeRow: View {
                     onFileSelect(node)
                 }
             } label: {
-                HStack(spacing: 5) {
-                    // Single rotating chevron for folders; a matching blank for files
-                    // so their icons line up under the folder labels (shadcn `ps-7`).
-                    Group {
-                        if node.isDirectory {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
-                                .foregroundStyle(ClaudeTheme.textTertiary)
-                                .rotationEffect(.degrees(isExpanded ? 0 : -90))
-                        } else {
-                            Color.clear
-                        }
+                // gap-1 (4px) between chevron, icon, and label
+                HStack(spacing: 4) {
+                    // Folders show a rotating `ChevronDownIcon` (size-4, muted).
+                    // Files get a blank of the same width so their icon aligns
+                    // under the folder label (shadcn `not-folder:ps-7`).
+                    if node.isDirectory {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: ClaudeTheme.size(11), weight: .medium))
+                            .foregroundStyle(ClaudeTheme.textTertiary)
+                            .rotationEffect(.degrees(isExpanded ? 0 : -90))
+                            .frame(width: Self.chevronSlot, height: Self.chevronSlot)
+                    } else {
+                        Color.clear.frame(width: Self.chevronSlot, height: Self.chevronSlot)
                     }
-                    .frame(width: 12, height: 12)
 
                     Image(systemName: node.icon)
                         .font(.system(size: ClaudeTheme.size(12)))
@@ -281,14 +284,21 @@ private struct FileNodeRow: View {
                             .foregroundStyle(ClaudeTheme.textTertiary)
                     }
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
+                // rounded-sm px-2 py-1.5
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(rowBackground, in: RoundedRectangle(cornerRadius: 5))
+                .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(isSelected ? ClaudeTheme.accent.opacity(0.4) : .clear, lineWidth: 0.5)
+                )
                 .contentShape(Rectangle())
+                // ps-(--tree-padding): level * indent
                 .padding(.leading, CGFloat(depth) * Self.indent)
             }
             .buttonStyle(.plain)
+            .animation(.easeInOut(duration: 0.12), value: isHovered)
             .onHover { isHovered = $0 }
             .contextMenu {
                 if !node.isDirectory {
@@ -313,9 +323,10 @@ private struct FileNodeRow: View {
         }
     }
 
+    /// `hover:bg-accent` / `data-[selected=true]:bg-accent` — accent-tinted fill.
     private var rowBackground: Color {
-        if isSelected { return ClaudeTheme.accent.opacity(0.18) }
-        if isHovered { return ClaudeTheme.sidebarItemHover }
+        if isSelected { return ClaudeTheme.accent.opacity(0.22) }
+        if isHovered { return ClaudeTheme.accent.opacity(0.10) }
         return .clear
     }
 
