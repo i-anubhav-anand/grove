@@ -384,10 +384,6 @@ final class AppState {
     var gitHubUser: GitHubUser?
     var repos: [GitHubRepo] = []
 
-    // MARK: - CLI Version
-
-    var claudeVersion: String?
-
     // MARK: - Marketplace
 
     var marketplaceCatalog: [MarketplacePlugin] = []
@@ -540,14 +536,6 @@ final class AppState {
 
         let binary = await claude.findClaudeBinary()
         claudeInstalled = binary != nil
-
-        if binary != nil {
-            do {
-                claudeVersion = try await claude.checkVersion()
-            } catch {
-                logger.warning("Failed to fetch Claude CLI version: \(error.localizedDescription)")
-            }
-        }
 
         GroveHome.bootstrap()
 
