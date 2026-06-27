@@ -13,6 +13,7 @@ struct ChatMarker: View {
     var isExpanded: Bool = false
 
     @State private var shimmerPhase: CGFloat = 0
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -46,14 +47,20 @@ struct ChatMarker: View {
 
             Spacer(minLength: 4)
 
-            if expandable {
+            // Expand/collapse affordance only appears on hover.
+            if expandable && isHovered {
                 Image(systemName: isExpanded ? "minus" : "plus")
                     .font(.system(size: ClaudeTheme.messageSize(9), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textTertiary)
+                    .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.12)) { isHovered = hovering }
+        }
     }
 
     // Sweeping shimmer: a bright band moves left→right over the text.
