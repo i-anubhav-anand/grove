@@ -49,7 +49,8 @@ struct WorkspaceListView: View {
                                             commitsAhead: workspace.flatMap { appState.workspaceCommitsAhead[$0.id] } ?? 0,
                                             onTap: { appState.selectSession(id: summary.id, in: windowState) },
                                             onArchive: { ws in archive(ws) },
-                                            onDelete: { pendingDeleteSession = summary }
+                                            onDelete: { pendingDeleteSession = summary },
+                                            onCreatePR: { createPR(for: summary) }
                                         )
                                     }
                                 }
@@ -248,6 +249,24 @@ struct WorkspaceListView: View {
 
     // MARK: - Actions
 
+    /// Select the session and send it a PR-creation prompt so the agent commits,
+    /// pushes, and opens the PR in that session's worktree.
+    private func createPR(for summary: ChatSession.Summary) {
+        appState.selectSession(id: summary.id, in: windowState)
+        windowState.inputText = Self.createPRPrompt
+        Task { await appState.send(in: windowState) }
+    }
+
+    private static let createPRPrompt = """
+    Create a PR for this branch.
+
+    - Review any uncommitted changes with `git diff` and commit them with a clear, conventional message.
+    - Push the branch with `git push -u origin HEAD`.
+    - Open the PR with `gh pr create --fill` (or pass `--title`/`--body` summarizing the change and linking any issue it closes).
+
+    If any step fails, stop and tell me what went wrong.
+    """
+
     private func archive(_ ws: Workspace) {
         Task {
             do {
@@ -305,6 +324,7 @@ private struct SessionCardRow: View {
     let onTap: () -> Void
     let onArchive: (Workspace) -> Void
     let onDelete: () -> Void
+    let onCreatePR: () -> Void
 
     @Environment(\.openURL) private var openURL
     @State private var isHovered = false
@@ -360,25 +380,42 @@ private struct SessionCardRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Actions — state badge + diff stat + PR link / archive
+                // Actions — state badge + diff stat + PR link / archive / create
                 VStack(alignment: .trailing, spacing: 3) {
                     HStack(spacing: 4) {
-                        // Archive affordance on hover once a PR is merged.
-                        if state == .merged, isHovered, let ws = workspace {
-                            Button { onArchive(ws) } label: {
-                                Image(systemName: "archivebox")
-                                    .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                                    .foregroundStyle(ClaudeTheme.textSecondary)
+                        // On hover: Create PR for committed work, Archive once merged.
+                        if isHovered, state == .committed {
+                            Button(action: onCreatePR) {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.triangle.pull")
+                                        .font(.system(size: ClaudeTheme.size(9), weight: .semibold))
+                                    Text("Create PR")
+                                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                                }
+                                .foregroundStyle(ClaudeTheme.accent)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(ClaudeTheme.accent.opacity(0.15), in: Capsule())
                             }
                             .buttonStyle(.plain)
-                            .help("Archive worktree")
+                            .help("Create a PR for this branch")
+                        } else {
+                            if state == .merged, isHovered, let ws = workspace {
+                                Button { onArchive(ws) } label: {
+                                    Image(systemName: "archivebox")
+                                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                                        .foregroundStyle(ClaudeTheme.textSecondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Archive worktree")
+                            }
+                            Text(state.description)
+                                .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                                .foregroundStyle(state.tint)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(state.tint.opacity(0.12), in: Capsule())
                         }
-                        Text(state.description)
-                            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                            .foregroundStyle(state.tint)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(state.tint.opacity(0.12), in: Capsule())
                     }
 
                     if let d = diffStat, !d.isEmpty {
