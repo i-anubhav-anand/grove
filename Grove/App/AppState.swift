@@ -93,6 +93,7 @@ final class AppState {
     /// the sidebar branch icon. Only populated when signed in and the project is
     /// linked to a GitHub repo.
     var workspacePRStates: [UUID: BranchPRState] = [:]
+    var workspacePRs: [UUID: BranchPR] = [:]
 
     /// Persisted sessionId -> workspaceId binding (the CLI sidecar doesn't carry it).
     var sessionWorkspaceBindings: [String: UUID] = [:] {

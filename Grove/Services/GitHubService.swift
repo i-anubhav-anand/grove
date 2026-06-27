@@ -260,7 +260,7 @@ actor GitHubService {
 
     /// GitHub PR state for a branch (open / merged / closed), or nil if the branch
     /// has no PR. Used to color the workspace's branch icon like GitHub does.
-    func fetchBranchPRState(repoFullName: String, branch: String) async throws -> BranchPRState? {
+    func fetchBranchPR(repoFullName: String, branch: String) async throws -> BranchPR? {
         let parts = repoFullName.split(separator: "/")
         guard parts.count == 2 else { return nil }
         let owner = String(parts[0])
@@ -271,8 +271,9 @@ actor GitHubService {
             path: "/repos/\(owner)/\(repo)/pulls?state=all&head=\(encodedHead)&per_page=20"
         )
         guard let pr = prs.first else { return nil }
-        if pr.mergedAt != nil { return .merged }
-        return pr.state == "closed" ? .closed : .open
+        let state: BranchPRState = pr.mergedAt != nil ? .merged : (pr.state == "closed" ? .closed : .open)
+        let mergedAt = pr.mergedAt.flatMap { ISO8601DateFormatter().date(from: $0) }
+        return BranchPR(state: state, number: pr.number, htmlUrl: pr.htmlUrl, baseBranch: pr.baseBranch, mergedAt: mergedAt)
     }
 
     /// Fetch the inline (diff) review comments for a pull request.
@@ -410,14 +411,37 @@ struct PullRequest: Decodable, Sendable, Identifiable {
     let state: String
     /// Non-nil once the PR has been merged.
     let mergedAt: String?
+    /// The branch this PR targets (e.g. "main").
+    let baseBranch: String?
 
     var id: Int { number }
 
-    enum CodingKeys: String, CodingKey {
-        case number, title, state
+    private enum CodingKeys: String, CodingKey {
+        case number, title, state, base
         case htmlUrl = "html_url"
         case mergedAt = "merged_at"
     }
+
+    private struct Base: Decodable { let ref: String }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        number = try c.decode(Int.self, forKey: .number)
+        title = try c.decode(String.self, forKey: .title)
+        htmlUrl = try c.decode(String.self, forKey: .htmlUrl)
+        state = try c.decode(String.self, forKey: .state)
+        mergedAt = try c.decodeIfPresent(String.self, forKey: .mergedAt)
+        baseBranch = (try? c.decode(Base.self, forKey: .base))?.ref
+    }
+}
+
+/// Rich PR info for a workspace's branch — number, link, target, merge time.
+struct BranchPR: Sendable {
+    let state: BranchPRState
+    let number: Int
+    let htmlUrl: String
+    let baseBranch: String?
+    let mergedAt: Date?
 }
 
 /// Single-PR detail subset — just the asynchronously-computed mergeability.

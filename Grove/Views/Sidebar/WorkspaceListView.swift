@@ -44,6 +44,7 @@ struct WorkspaceListView: View {
                                             isCurrent: appState.currentSession(in: windowState)?.id == summary.id,
                                             isStreaming: appState.isStreaming(summary.id),
                                             prState: workspace.flatMap { appState.workspacePRStates[$0.id] },
+                                            pr: workspace.flatMap { appState.workspacePRs[$0.id] },
                                             diffStat: workspace.flatMap { appState.workspaceDiffStats[$0.id] },
                                             onTap: { appState.selectSession(id: summary.id, in: windowState) },
                                             onArchive: { ws in archive(ws) },
@@ -297,11 +298,13 @@ private struct SessionCardRow: View {
     let isCurrent: Bool
     let isStreaming: Bool
     let prState: BranchPRState?
+    let pr: BranchPR?
     let diffStat: DiffStat?
     let onTap: () -> Void
     let onArchive: (Workspace) -> Void
     let onDelete: () -> Void
 
+    @Environment(\.openURL) private var openURL
     @State private var isHovered = false
     @State private var pulsing = false
 
@@ -336,7 +339,12 @@ private struct SessionCardRow: View {
                         .lineLimit(1)
 
                     HStack(spacing: 3) {
-                        if let ws = workspace {
+                        if state == .merged, let base = pr?.baseBranch {
+                            Image(systemName: "arrow.triangle.merge")
+                                .font(.system(size: ClaudeTheme.size(9)))
+                            Text("merged into \(base)")
+                            if let ago = mergedAgo { Text("· \(ago)") }
+                        } else if let ws = workspace {
                             Image(systemName: "arrow.triangle.branch")
                                 .font(.system(size: ClaudeTheme.size(9)))
                             Text(ws.branch)
@@ -350,14 +358,26 @@ private struct SessionCardRow: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Actions — state badge + diff stat
+                // Actions — state badge + diff stat + PR link / archive
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(state.description)
-                        .font(.system(size: ClaudeTheme.size(10), weight: .medium))
-                        .foregroundStyle(state.tint)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(state.tint.opacity(0.12), in: Capsule())
+                    HStack(spacing: 4) {
+                        // Archive affordance on hover once a PR is merged.
+                        if state == .merged, isHovered, let ws = workspace {
+                            Button { onArchive(ws) } label: {
+                                Image(systemName: "archivebox")
+                                    .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                                    .foregroundStyle(ClaudeTheme.textSecondary)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Archive worktree")
+                        }
+                        Text(state.description)
+                            .font(.system(size: ClaudeTheme.size(10), weight: .medium))
+                            .foregroundStyle(state.tint)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(state.tint.opacity(0.12), in: Capsule())
+                    }
 
                     if let d = diffStat, !d.isEmpty {
                         HStack(spacing: 3) {
@@ -365,6 +385,22 @@ private struct SessionCardRow: View {
                             Text("-\(d.deleted)").foregroundStyle(ClaudeTheme.statusError)
                         }
                         .font(.system(size: ClaudeTheme.size(10), weight: .medium, design: .monospaced))
+                    }
+
+                    if let pr {
+                        Button {
+                            if let url = URL(string: pr.htmlUrl) { openURL(url) }
+                        } label: {
+                            HStack(spacing: 2) {
+                                Text("#\(pr.number)")
+                                Image(systemName: "arrow.up.right")
+                                    .font(.system(size: ClaudeTheme.size(8), weight: .semibold))
+                            }
+                            .font(.system(size: ClaudeTheme.size(10), weight: .medium, design: .monospaced))
+                            .foregroundStyle(ClaudeTheme.textSecondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Open PR #\(pr.number)")
                     }
                 }
             }
@@ -464,6 +500,13 @@ private struct SessionCardRow: View {
             default:          return .backlog
             }
         }
+    }
+
+    private var mergedAgo: String? {
+        guard let date = pr?.mergedAt else { return nil }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .abbreviated
+        return f.localizedString(for: date, relativeTo: Date())
     }
 
     // MARK: - Appearance

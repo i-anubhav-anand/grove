@@ -101,14 +101,17 @@ extension AppState {
     func refreshWorkspacePRStates() async {
         guard await github.accessToken != nil else { return }
         var states: [UUID: BranchPRState] = [:]
+        var prs: [UUID: BranchPR] = [:]
         for ws in workspaces {
             guard let project = projects.first(where: { $0.id == ws.projectId }),
                   let repo = project.gitHubRepo, !repo.isEmpty else { continue }
-            if let state = try? await github.fetchBranchPRState(repoFullName: repo, branch: ws.branch) {
-                states[ws.id] = state
+            if let pr = try? await github.fetchBranchPR(repoFullName: repo, branch: ws.branch) {
+                states[ws.id] = pr.state
+                prs[ws.id] = pr
             }
         }
         workspacePRStates = states
+        workspacePRs = prs
     }
 
     /// Load persisted workspaces and drop any whose worktree directory is gone
