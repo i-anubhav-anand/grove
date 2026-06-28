@@ -4,6 +4,7 @@ import GroveCore
 /// Right-panel "Changes" tab: lists the changed files in the selected workspace's
 /// worktree and opens the existing diff view on tap. Bound to `worktreePath`.
 struct ChangesPaneView: View {
+    @Environment(AppState.self) private var appState
     @Environment(WindowState.self) private var windowState
     @Environment(\.openURL) private var openURL
     let worktreePath: String?
@@ -14,6 +15,7 @@ struct ChangesPaneView: View {
     @State private var loading = false
     @State private var showComments = false
     @State private var groupByFolder = false
+    @State private var commitsBehind = 0
 
     struct ChangedFile: Identifiable, Equatable {
         let id = UUID()
@@ -31,7 +33,14 @@ struct ChangesPaneView: View {
             ClaudeThemeDivider()
             content
         }
-        .task(id: worktreePath) { await reload() }
+        .task(id: worktreePath) {
+            // Poll while the pane is mounted (i.e. the inspector is open) so the
+            // list stays current instead of showing a stale empty state.
+            while !Task.isCancelled {
+                await reload()
+                try? await Task.sleep(for: .seconds(3))
+            }
+        }
     }
 
     private var header: some View {
@@ -82,7 +91,7 @@ struct ChangesPaneView: View {
         } else if worktreePath == nil {
             placeholder("Select a workspace to see its changes")
         } else if files.isEmpty {
-            placeholder(loading ? "Loading…" : "Working tree clean")
+            emptyChangesState
         } else if groupByFolder {
             List {
                 ForEach(groupedFiles, id: \.folder) { group in
@@ -167,6 +176,43 @@ struct ChangesPaneView: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// Empty state for a clean working tree — with a "pull latest" affordance
+    /// when the branch is behind its base.
+    private var emptyChangesState: some View {
+        VStack(spacing: 10) {
+            Spacer()
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: ClaudeTheme.size(30)))
+                .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.5))
+            Text(loading ? "Loading…" : "No file changes yet")
+                .font(.system(size: ClaudeTheme.size(14), weight: .medium))
+                .foregroundStyle(ClaudeTheme.textSecondary)
+            Text("Changes appear here.")
+                .font(.system(size: ClaudeTheme.size(12)))
+                .foregroundStyle(ClaudeTheme.textTertiary)
+            if commitsBehind > 0 {
+                Button(action: pullLatest) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.down")
+                        Text("Pull latest from main (\(commitsBehind) commit\(commitsBehind == 1 ? "" : "s"))")
+                    }
+                    .font(.system(size: ClaudeTheme.size(12), weight: .medium))
+                    .foregroundStyle(ClaudeTheme.accent)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    /// Ask the agent to bring the base branch's latest commits into this branch.
+    private func pullLatest() {
+        windowState.inputText = "Pull the latest changes from the base branch (origin/main) into this branch with `git pull --rebase origin main` (or merge), and resolve any conflicts."
+        Task { await appState.send(in: windowState) }
+    }
+
     private func open(_ file: ChangedFile) {
         guard let root = worktreePath else { return }
         let full = (root as NSString).appendingPathComponent(file.relativePath)
@@ -203,7 +249,18 @@ struct ChangesPaneView: View {
             let (added, deleted) = counts[path] ?? (0, 0)
             return ChangedFile(status: status, relativePath: path, added: added, deleted: deleted)
         }
+        commitsBehind = await Self.commitsBehind(cwd: root)
         loading = false
+    }
+
+    /// Commits on the base branch that this branch doesn't have yet.
+    static func commitsBehind(cwd: String) async -> Int {
+        for base in ["origin/HEAD", "origin/main", "origin/master"] {
+            let out = await runGit(cwd: cwd, args: ["rev-list", "--count", "HEAD..\(base)"])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !out.isEmpty, let n = Int(out) { return n }
+        }
+        return 0
     }
 
     /// Per-path (added, deleted) line counts for tracked changes vs HEAD.

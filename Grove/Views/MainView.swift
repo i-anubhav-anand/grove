@@ -318,7 +318,7 @@ struct InspectorPanel: View {
     private func bumpFocus(for tab: InspectorTab) {
         switch tab {
         case .memo: memoFocusID = UUID()
-        case .files, .changes, .checks: break
+        case .files, .changes: break
         }
     }
 
@@ -388,13 +388,6 @@ struct InspectorPanel: View {
                 .frame(maxHeight: windowState.inspectorTab == .changes ? .infinity : 0)
                 .clipped()
 
-            ChecksPaneView(
-                worktreePath: windowState.selectedWorkspace?.worktreePath,
-                branch: windowState.selectedWorkspace?.branch
-            )
-            .frame(maxHeight: windowState.inspectorTab == .checks ? .infinity : 0)
-            .clipped()
-
             InspectorMemoPanel(projectId: windowState.selectedProject?.id,
                                clearTrigger: memoClearID,
                                focusTrigger: memoFocusID)
@@ -417,11 +410,14 @@ struct InspectorPanel: View {
             if isShowing { bumpFocus(for: windowState.inspectorTab) }
         }
         .task(id: workspaceCwd) {
-            // Drives the "Changes" tab badge. Reuses ChangesPaneView's git-status helper rather than
-            // duplicating the plumbing; counts porcelain lines the same way the pane does.
+            // Drives the "Changes" tab badge. Polls while the inspector is open so the
+            // count stays current instead of showing a stale 0 after files change.
             guard let cwd = workspaceCwd else { changedFileCount = 0; return }
-            let output = await ChangesPaneView.runGit(cwd: cwd, args: ["status", "--porcelain"])
-            changedFileCount = output.split(separator: "\n").filter { $0.count > 3 }.count
+            while !Task.isCancelled {
+                let output = await ChangesPaneView.runGit(cwd: cwd, args: ["status", "--porcelain"])
+                changedFileCount = output.split(separator: "\n").filter { $0.count > 3 }.count
+                try? await Task.sleep(for: .seconds(3))
+            }
         }
         .task(id: "\(repoFullName ?? "")|\(prBranch ?? "")") {
             await prModel.reload(github: appState.github, repo: repoFullName, branch: prBranch, loggedIn: appState.isLoggedIn)
