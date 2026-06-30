@@ -437,15 +437,22 @@ struct PlainActivityRow: View {
         return chatBridge.subagentRuns[tc.id]
     }
 
-    /// A one-line greyish preview of a thinking block, shown next to "Thinking".
-    /// Hard-capped at a fixed length with an ellipsis so it never grows long.
-    private var thinkingPreview: String? {
-        guard case .thinking(_, let text, _) = item else { return nil }
-        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !t.isEmpty else { return nil }
-        let firstLine = t.split(separator: "\n").first.map(String.init) ?? t
-        let limit = 72
-        return firstLine.count > limit ? String(firstLine.prefix(limit)) + "…" : firstLine
+    /// One-line greyish preview shown next to the marker label.
+    /// For thinking blocks: first line of the thought.
+    /// For agent/task tool calls: the description field.
+    private var markerPreview: String? {
+        switch item {
+        case .thinking(_, let text, _):
+            let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !t.isEmpty else { return nil }
+            let firstLine = t.split(separator: "\n").first.map(String.init) ?? t
+            let limit = 72
+            return firstLine.count > limit ? String(firstLine.prefix(limit)) + "…" : firstLine
+        case .toolCall(let tc) where ["agent", "task"].contains(tc.name.lowercased()):
+            return tc.input["description"]?.stringValue
+        default:
+            return nil
+        }
     }
 
     var body: some View {
@@ -467,9 +474,8 @@ struct PlainActivityRow: View {
                 icon: markerIcon,
                 isRunning: isRunning,
                 label: markerLabel,
-                // Hide the preview once expanded — the full text shows below, so
-                // keeping the pill would just repeat the opening line.
-                preview: effectiveExpanded ? nil : thinkingPreview,
+                // Hide the preview once expanded — the full content shows below.
+                preview: effectiveExpanded ? nil : markerPreview,
                 expandable: hasExpandableContent,
                 isExpanded: effectiveExpanded
             )
@@ -612,7 +618,7 @@ struct PlainActivityRow: View {
         case "write":   return "Writing..."
         case "grep":    return "Searching..."
         case "glob":    return "Finding files..."
-        case "agent":   return "Spawning agent..."
+        case "agent", "task": return "Spawning agent..."
         default:        return "\(tc.name)..."
         }
     }
@@ -651,8 +657,8 @@ struct PlainActivityRow: View {
                 return "Find — \(pat.prefix(50))"
             }
             return "Find files"
-        case "agent":
-            return tc.input["description"]?.stringValue ?? "Agent"
+        case "agent", "task":
+            return "Agent"
         default:
             return tc.name
         }
@@ -665,7 +671,7 @@ struct PlainActivityRow: View {
         case "edit", "multiedit", "multi_edit":  return "pencil"
         case "write":                            return "square.and.pencil"
         case "grep", "glob":                     return "magnifyingglass"
-        case "agent":                            return "cpu"
+        case "agent", "task":                    return "cpu"
         default:                                 return "wrench"
         }
     }
