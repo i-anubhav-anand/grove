@@ -241,11 +241,10 @@ struct MessageBubble: View {
 
         return HStack(alignment: .bottom, spacing: 0) {
             if message.isStreaming && isLastBlock {
-                Text(text)
-                    .font(.system(size: ClaudeTheme.messageSize(12)))
-                    .lineSpacing(3)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Hold text until streaming completes so markdown never appears raw.
+                // The blinking cursor below signals that output is in progress.
+                Color.clear
+                    .frame(maxWidth: .infinity, minHeight: 16, alignment: .leading)
             } else {
                 MarkdownContentView(text: text)
                     .frame(maxWidth: .infinity, alignment: .leading)
