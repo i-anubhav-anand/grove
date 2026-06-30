@@ -15,6 +15,12 @@ struct MainView: View {
     @State private var resizeBaseWidth: Double? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showCommandPalette = false
+    // Hard floor for the chat pane — sidebar and inspector budgets are computed
+    // to always leave at least this much room, so chat never overlaps either side.
+    private let minChatWidth: CGFloat = 380
+    // Sidebar's widest possible column (see navigationSplitViewColumnWidth below) —
+    // used as the worst-case deduction when budgeting room for the inspector.
+    private let maxSidebarWidth: CGFloat = 360
 
     enum SidebarTab: String, CaseIterable {
         case history = "History"
@@ -34,17 +40,19 @@ struct MainView: View {
         } else {
             GeometryReader { geo in
             // Inspector floor = the default width (never shrink below it); ceiling = 25% of the
-            // window, but never so wide that the chat pane drops below minChatWidth — the chat
-            // is never the one that gives way when the inspector resizes or opens at its default.
-            let minChatWidth: CGFloat = 480
-            let maxInspector = min(max(320, geo.size.width * 0.25), max(geo.size.width - minChatWidth, 320))
+            // window, but never so wide that sidebar (worst case) + chat floor + inspector would
+            // overflow the window — the chat always gets its room between the two side panels.
+            let maxInspector = min(
+                max(320, geo.size.width * 0.25),
+                max(geo.size.width - maxSidebarWidth - minChatWidth, 320)
+            )
             HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     sidebarContent
                 } detail: {
                     detailContent
-                        .frame(minWidth: 480)
+                        .frame(minWidth: minChatWidth, maxWidth: .infinity)
                 }
                 .background {
                     Button("") {

@@ -35,7 +35,7 @@ struct GroveApp: App {
             MainWindowRoot(appState: appState)
                 .focusable(false)
         }
-        .defaultSize(width: 1000, height: 700)
+        .defaultSize(width: 1200, height: 760)
         .defaultLaunchBehavior(.presented)
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -66,7 +66,7 @@ struct GroveApp: App {
                     .focusable(false)
             }
         }
-        .defaultSize(width: 1000, height: 700)
+        .defaultSize(width: 1200, height: 760)
 
         Settings {
             SettingsWindowRoot(appState: appState)
