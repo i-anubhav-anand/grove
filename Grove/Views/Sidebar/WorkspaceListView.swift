@@ -333,12 +333,6 @@ private struct SessionCardRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(alignment: .center, spacing: 10) {
-                // Grip handle
-                Image(systemName: "line.3.horizontal")
-                    .font(.system(size: ClaudeTheme.size(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary.opacity(isHovered ? 0.8 : 0.3))
-                    .frame(width: 16)
-
                 // Media — state-driven leading icon (spinner while running)
                 ZStack {
                     RoundedRectangle(cornerRadius: 6)
