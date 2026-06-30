@@ -746,25 +746,26 @@ private struct ChainStepRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            // Left rail: dot node + vertical connector
-            VStack(spacing: 0) {
-                Circle()
-                    .fill(dotColor)
-                    .frame(width: 6, height: 6)
-                    .padding(.top, 6)
+            Circle()
+                .fill(dotColor)
+                .frame(width: 6, height: 6)
+                .padding(.top, 6)
+                .frame(width: 14, alignment: .center)
 
-                if !isLast {
+            PlainActivityRow(item: item, expandedOverride: itemExpandedBinding)
+                .padding(.bottom, isLast ? 0 : 4)
+        }
+        // Connector is in an overlay so it cannot inflate the HStack height.
+        .overlay(alignment: .topLeading) {
+            if !isLast {
+                VStack(spacing: 0) {
+                    Color.clear.frame(height: 16) // 6pt top pad + 6pt dot + 4pt gap
                     Rectangle()
                         .fill(ClaudeTheme.border)
                         .frame(width: 1)
-                        .frame(maxHeight: .infinity)
-                        .padding(.top, 4)
                 }
+                .frame(width: 14)
             }
-            .frame(width: 14, alignment: .center)
-
-            PlainActivityRow(item: item, expandedOverride: itemExpandedBinding)
-                .padding(.bottom, isLast ? 2 : 10)
         }
     }
 
