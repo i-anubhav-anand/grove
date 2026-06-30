@@ -58,6 +58,7 @@ struct MarkdownContentView: View {
                 case .attributedText(let attrStr):
                     Text(attrStr)
                         .font(.system(size: ClaudeTheme.messageSize(13)))
+                        .textRenderer(CodePillRenderer(fill: ClaudeTheme.surfaceTertiary, border: ClaudeTheme.border))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .blockquote(let attrStr):
@@ -507,7 +508,8 @@ private func parseInlineMarkdown(_ content: String) -> AttributedString {
     for run in result.runs {
         guard let intent = run.inlinePresentationIntent, intent.contains(.code) else { continue }
         result[run.range].foregroundColor = ClaudeTheme.textPrimary
-        result[run.range].backgroundColor = ClaudeTheme.surfaceTertiary
+        // Tag for CodePillRenderer (rounded bubble) instead of a flat background.
+        result[run.range][CodePillAttribute.self] = true
     }
     return result
 }
@@ -566,6 +568,7 @@ private struct BlockquoteView: View {
 
     var body: some View {
         Text(content)
+            .textRenderer(CodePillRenderer(fill: ClaudeTheme.surfaceTertiary, border: ClaudeTheme.border))
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 13)
