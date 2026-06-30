@@ -680,7 +680,7 @@ struct PlainActivityRow: View {
 struct TurnActivitySummaryView: View {
     let messages: [ChatMessage]
     @State private var isExpanded = false
-    @State private var expandedId: String? = nil
+    @State private var expandedIds: Set<String> = []
 
     private var toolCallCount: Int {
         messages.reduce(0) { $0 + $1.blocks.compactMap(\.toolCall).count }
@@ -716,7 +716,7 @@ struct TurnActivitySummaryView: View {
                     let items = activityItems(from: messages)
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
-                            ChainStepRow(item: item, isLast: idx == items.count - 1, expandedId: $expandedId)
+                            ChainStepRow(item: item, isLast: idx == items.count - 1, expandedIds: $expandedIds)
                         }
                     }
                 }
@@ -734,13 +734,14 @@ struct TurnActivitySummaryView: View {
 private struct ChainStepRow: View {
     let item: ActivityItem
     let isLast: Bool
-    @Binding var expandedId: String?
+    @Binding var expandedIds: Set<String>
 
-    private var isItemExpanded: Bool { expandedId == item.id }
     private var itemExpandedBinding: Binding<Bool> {
         Binding(
-            get: { expandedId == item.id },
-            set: { newVal in expandedId = newVal ? item.id : nil }
+            get: { expandedIds.contains(item.id) },
+            set: { newVal in
+                if newVal { expandedIds.insert(item.id) } else { expandedIds.remove(item.id) }
+            }
         )
     }
 
