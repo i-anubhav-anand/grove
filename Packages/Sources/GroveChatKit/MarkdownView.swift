@@ -57,12 +57,12 @@ struct MarkdownContentView: View {
                 switch group {
                 case .attributedText(let attrStr):
                     Text(attrStr)
-                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .font(.system(size: ClaudeTheme.messageSize(13)))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .blockquote(let attrStr):
                     BlockquoteView(content: attrStr)
-                        .font(.system(size: ClaudeTheme.messageSize(12)))
+                        .font(.system(size: ClaudeTheme.messageSize(13)))
                 case .codeBlock(let language, let code):
                     CodeBlockView(language: language, code: code)
                         .padding(.vertical, 8)
@@ -252,7 +252,7 @@ struct MarkdownContentView: View {
     }
 
     private static func fontForHeading(_ level: Int) -> Font {
-        let base = ClaudeTheme.messageSize(12)
+        let base = ClaudeTheme.messageSize(13)
         switch level {
         case 1: return .system(size: base + 5, weight: .bold)
         case 2: return .system(size: base + 3, weight: .bold)
