@@ -1,10 +1,14 @@
 import SwiftUI
 import GroveCore
 
+// Test comment — throwaway line to exercise the commit/diff flow.
+
 struct ToolResultView: View {
     let toolCall: ToolCall
     var isMessageStreaming: Bool = false
-    @State private var isExpanded: Bool
+    // Lifted into the parent (keyed by the row's stable id) so it survives the
+    // view rebuilds that happen on every streaming token.
+    @Binding var isExpanded: Bool
     @State private var isDiffExpanded = false
     @State private var outputExpanded = false
     @State private var isRowHovered = false
@@ -13,18 +17,11 @@ struct ToolResultView: View {
     /// Lowercased tool name (avoids repeated lowercased() calls)
     private let toolNameLower: String
 
-    init(toolCall: ToolCall, isMessageStreaming: Bool = false) {
+    init(toolCall: ToolCall, isMessageStreaming: Bool = false, isExpanded: Binding<Bool>) {
         self.toolCall = toolCall
         self.isMessageStreaming = isMessageStreaming
-        let lower = toolCall.name.lowercased()
-        self.toolNameLower = lower
-        let isTransient = ToolCategory(toolName: lower).isTransient
-        // Edits are represented by the compact file-edit pills (with a hover diff
-        // preview) below the message, so they no longer auto-expand a big inline
-        // diff here. Transient tools expand only while running (until result arrives).
-        self._isExpanded = State(initialValue:
-            isTransient && isMessageStreaming && toolCall.result == nil
-        )
+        self._isExpanded = isExpanded
+        self.toolNameLower = toolCall.name.lowercased()
     }
 
     /// Description input for the Agent tool
@@ -365,6 +362,7 @@ struct ToolResultView: View {
     private var primaryLabel: String {
         if toolNameLower == "agent" { return agentDisplayTitle }
         if let skillName { return "Skill — \(skillName)" }
+        if isBashTool { return bashRowLabel(toolCall) }
         return inputSummary
     }
 

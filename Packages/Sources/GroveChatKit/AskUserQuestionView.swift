@@ -9,6 +9,9 @@ struct AskUserQuestionView: View {
     /// Selected option labels for a multi-select question, awaiting submission.
     @State private var selected: Set<String> = []
 
+    /// Expand state for the raw-debug fallback row (malformed input only).
+    @State private var fallbackExpanded = false
+
     private var parsed: AskUserQuestion? {
         AskUserQuestion(input: toolCall.input)
     }
@@ -32,7 +35,7 @@ struct AskUserQuestionView: View {
             .bubbleStyle(.tool)
         } else {
             // Fallback: malformed input — show raw debug card
-            ToolResultView(toolCall: toolCall)
+            ToolResultView(toolCall: toolCall, isExpanded: $fallbackExpanded)
         }
     }
 

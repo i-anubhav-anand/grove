@@ -15,6 +15,9 @@ struct MessageBubble: View {
     @State private var isLongTextExpanded = false
     @State private var hoveredBlockId: String? = nil
     @State private var isHoveringUserBubble = false
+    // Per-row expand state lifted out of PlainActivityRow, keyed by the row's
+    // stable id (tool_use id / block id) so it survives streaming rebuilds.
+    @State private var expandedBlocks: Set<String> = []
 
     /// Threshold (character count) for collapsing long text
     private static let longTextThreshold = 500
@@ -110,11 +113,11 @@ struct MessageBubble: View {
             } else if toolCall.name == "AskUserQuestion" {
                 AskUserQuestionView(toolCall: toolCall)
             } else {
-                PlainActivityRow(item: .toolCall(toolCall), isMessageStreaming: message.isStreaming)
+                PlainActivityRow(item: .toolCall(toolCall), isMessageStreaming: message.isStreaming, isExpanded: $expandedBlocks.contains(toolCall.id))
             }
         }
         if block.isThinking, let text = block.thinking, !text.isEmpty {
-            PlainActivityRow(item: .thinking(id: block.id, text: text, duration: block.thinkingDuration), isMessageStreaming: message.isStreaming)
+            PlainActivityRow(item: .thinking(id: block.id, text: text, duration: block.thinkingDuration), isMessageStreaming: message.isStreaming, isExpanded: $expandedBlocks.contains(block.id))
         }
     }
 
