@@ -11,7 +11,7 @@ struct MainView: View {
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
     @State private var inspectorStarted = true
-    @AppStorage("inspectorPanelWidth") private var inspectorWidth: Double = 280
+    @AppStorage("inspectorPanelWidth") private var inspectorWidth: Double = 320
     @State private var resizeBaseWidth: Double? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showCommandPalette = false
@@ -35,7 +35,7 @@ struct MainView: View {
             GeometryReader { geo in
             // Inspector floor = the default width (never shrink below it); ceiling = 25% of the
             // window so the chat keeps ≥75%. On narrow windows where 25% < default, the default wins.
-            let maxInspector = max(280, geo.size.width * 0.25)
+            let maxInspector = max(320, geo.size.width * 0.25)
             HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -105,7 +105,7 @@ struct MainView: View {
                                 // (Reading + writing inspectorWidth with absolute translation made it accelerate.)
                                 let base = resizeBaseWidth ?? inspectorWidth
                                 if resizeBaseWidth == nil { resizeBaseWidth = base }
-                                inspectorWidth = min(max(base - value.translation.width, 280), maxInspector)
+                                inspectorWidth = min(max(base - value.translation.width, 320), maxInspector)
                             }
                             .onEnded { _ in resizeBaseWidth = nil }
                     )
@@ -114,7 +114,7 @@ struct MainView: View {
                     }
 
                 InspectorPanel()
-                    .frame(width: min(max(CGFloat(inspectorWidth), 280), maxInspector))
+                    .frame(width: min(max(CGFloat(inspectorWidth), 320), maxInspector))
                     .id(appState.themeRevision)
             }
             } // HStack
