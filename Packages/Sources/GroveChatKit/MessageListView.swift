@@ -414,8 +414,15 @@ struct PlainActivityRow: View {
     @Environment(WindowState.self) private var windowState
     let item: ActivityItem
     var isMessageStreaming: Bool = false
+    /// External accordion binding. When set, this row's expand/collapse is controlled
+    /// by the parent so only one item can be open at a time.
+    var expandedOverride: Binding<Bool>? = nil
     @State private var isExpanded = false
-    @State private var isContentExpanded = false
+
+    private var effectiveExpanded: Bool { expandedOverride?.wrappedValue ?? isExpanded }
+    private func setExpanded(_ value: Bool) {
+        if let b = expandedOverride { b.wrappedValue = value } else { isExpanded = value }
+    }
 
     /// An edit/write tool call rendered as a rich file row (chip + diff + hover).
     private var fileEdit: FileEdit? {
@@ -462,17 +469,17 @@ struct PlainActivityRow: View {
                 label: markerLabel,
                 // Hide the preview once expanded — the full text shows below, so
                 // keeping the pill would just repeat the opening line.
-                preview: isExpanded ? nil : thinkingPreview,
+                preview: effectiveExpanded ? nil : thinkingPreview,
                 expandable: hasExpandableContent,
-                isExpanded: isExpanded
+                isExpanded: effectiveExpanded
             )
             .contentShape(Rectangle())
             .onTapGesture {
                 guard hasExpandableContent else { return }
-                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+                withAnimation(.easeInOut(duration: 0.15)) { setExpanded(!effectiveExpanded) }
             }
 
-            if isExpanded {
+            if effectiveExpanded {
                 rowContent
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
@@ -524,8 +531,11 @@ struct PlainActivityRow: View {
         if let run = subagentRun {
             AgentStepsView(run: run)
         } else if case .thinking(_, let text, _) = item {
-            MarkdownContentView(text: text)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView {
+                MarkdownContentView(text: text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 200)
         } else if case .toolCall(let tc) = item {
             toolContent(tc)
         }
@@ -539,7 +549,7 @@ struct PlainActivityRow: View {
         } else if (lower == "edit" || lower == "multiedit" || lower == "multi_edit"),
                   let old = tc.input["old_string"]?.stringValue,
                   let new = tc.input["new_string"]?.stringValue {
-            diffCard(old: old, new: new)
+            DiffViewerCard(filePath: tc.input["file_path"]?.stringValue, old: old, new: new)
         } else if let result = tc.result, !result.isEmpty {
             resultCard(result)
         }
@@ -588,42 +598,6 @@ struct PlainActivityRow: View {
         }
         .frame(maxHeight: 200)
         .padding(10)
-        .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
-    }
-
-    private func diffCard(old: String, new: String) -> some View {
-        let removedLines = old.components(separatedBy: .newlines).map { ("-", $0, false) }
-        let addedLines = new.components(separatedBy: .newlines).map { ("+", $0, true) }
-        let allLines = removedLines + addedLines
-        let threshold = 14
-        let visible = isContentExpanded ? allLines : Array(allLines.prefix(threshold))
-        return VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(visible.enumerated()), id: \.offset) { _, triple in
-                let (pfx, txt, isAdded) = triple
-                Text(pfx + " " + txt)
-                    .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
-                    .foregroundStyle(isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 1)
-                    .background((isAdded ? ClaudeTheme.statusSuccess : ClaudeTheme.statusError).opacity(0.06))
-            }
-            if allLines.count > threshold {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) { isContentExpanded.toggle() }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(isContentExpanded ? "Show less" : "Show more", bundle: .module)
-                        Image(systemName: isContentExpanded ? "chevron.up" : "chevron.down")
-                    }
-                    .font(.system(size: ClaudeTheme.messageSize(11)))
-                    .foregroundStyle(ClaudeTheme.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                }
-                .buttonStyle(.plain)
-            }
-        }
         .background(ClaudeTheme.codeBackground, in: RoundedRectangle(cornerRadius: 6))
     }
 
@@ -701,10 +675,12 @@ struct PlainActivityRow: View {
 
 /// Collapses a completed turn's intermediate activity into a single header
 /// ("N tool calls · M messages"). Collapsed by default so the final answer is
-/// what you read; expand to see each tool call and thinking block.
+/// what you read; expand to see each tool call and thinking block in a
+/// chain-of-thought timeline.
 struct TurnActivitySummaryView: View {
     let messages: [ChatMessage]
     @State private var isExpanded = false
+    @State private var expandedId: String? = nil
 
     private var toolCallCount: Int {
         messages.reduce(0) { $0 + $1.blocks.compactMap(\.toolCall).count }
@@ -718,7 +694,7 @@ struct TurnActivitySummaryView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 0) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
                 } label: {
@@ -734,15 +710,79 @@ struct TurnActivitySummaryView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .padding(.bottom, isExpanded ? 10 : 0)
 
                 if isExpanded {
                     let items = activityItems(from: messages)
-                    ForEach(items) { item in
-                        PlainActivityRow(item: item)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(items.enumerated()), id: \.element.id) { idx, item in
+                            ChainStepRow(item: item, isLast: idx == items.count - 1, expandedId: $expandedId)
+                        }
                     }
                 }
             }
-            Spacer(minLength: 40)
+            Spacer(minLength: 0)
+        }
+        .containerRelativeFrame(.horizontal) { w, _ in w * 0.75 }
+    }
+}
+
+// MARK: - Chain Step Row
+
+/// One step in the settled-turn chain-of-thought timeline. Wraps PlainActivityRow
+/// with a left rail (dot + connecting line) so expanded steps read like a timeline.
+private struct ChainStepRow: View {
+    let item: ActivityItem
+    let isLast: Bool
+    @Binding var expandedId: String?
+
+    private var isItemExpanded: Bool { expandedId == item.id }
+    private var itemExpandedBinding: Binding<Bool> {
+        Binding(
+            get: { expandedId == item.id },
+            set: { newVal in expandedId = newVal ? item.id : nil }
+        )
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            // Left rail: dot node + vertical connector
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 6, height: 6)
+                    .padding(.top, 6)
+
+                if !isLast {
+                    Rectangle()
+                        .fill(ClaudeTheme.border)
+                        .frame(width: 1)
+                        .frame(maxHeight: .infinity)
+                        .padding(.top, 4)
+                }
+            }
+            .frame(width: 14, alignment: .center)
+
+            PlainActivityRow(item: item, expandedOverride: itemExpandedBinding)
+                .padding(.bottom, isLast ? 2 : 10)
+        }
+    }
+
+    private var dotColor: Color {
+        switch item {
+        case .thinking:
+            return ClaudeTheme.accent.opacity(0.75)
+        case .toolCall(let tc):
+            switch tc.name.lowercased() {
+            case "bash":
+                return ClaudeTheme.statusSuccess
+            case "edit", "write", "multiedit", "multi_edit":
+                return ClaudeTheme.statusWarning
+            case "read", "grep", "glob":
+                return ClaudeTheme.textSecondary
+            default:
+                return ClaudeTheme.textTertiary
+            }
         }
     }
 }

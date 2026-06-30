@@ -1,16 +1,31 @@
 import SwiftUI
 import GroveCore
 
-/// Tags an inline-code run so `CodePillRenderer` draws a rounded bubble behind it.
-/// Conforms to AttributedStringKey (to set on the string) and TextAttribute (to
-/// read back in the renderer).
-enum CodePillAttribute: AttributedStringKey, TextAttribute {
+// MARK: - CodePillAttribute
+
+struct CodePillAttribute: CodableAttributedStringKey, TextAttribute {
     typealias Value = Bool
     static let name = "codePill"
 }
 
-/// Draws a rounded, subtly-bordered "bubble" behind inline-code runs while keeping
-/// the paragraph in a single selectable, wrapping `Text`. macOS 15+ (`TextRenderer`).
+// MARK: - Attribute Scope
+
+extension AttributeScopes {
+    struct GroveAttributes: AttributeScope {
+        let codePill: CodePillAttribute
+        var swiftUI: SwiftUIAttributes
+    }
+    var grove: GroveAttributes.Type { GroveAttributes.self }
+}
+
+extension AttributeDynamicLookup {
+    subscript<T: AttributedStringKey>(
+        dynamicMember keyPath: KeyPath<AttributeScopes.GroveAttributes, T>
+    ) -> T { self[T.self] }
+}
+
+// MARK: - Renderer
+
 struct CodePillRenderer: TextRenderer {
     var fill: Color
     var border: Color
@@ -19,10 +34,10 @@ struct CodePillRenderer: TextRenderer {
         for line in layout {
             for run in line {
                 if run[CodePillAttribute.self] != nil {
-                    let rect = run.typographicBounds.rect.insetBy(dx: -3, dy: -1.5)
-                    let shape = Path(roundedRect: rect, cornerRadius: 4)
-                    context.fill(shape, with: .color(fill))
-                    context.stroke(shape, with: .color(border), lineWidth: 0.6)
+                    let rect = run.typographicBounds.rect
+                    let pill = rect.insetBy(dx: -3, dy: -2)
+                    context.fill(Path(roundedRect: pill, cornerRadius: 3), with: .color(fill))
+                    context.stroke(Path(roundedRect: pill, cornerRadius: 3), with: .color(border), lineWidth: 0.5)
                 }
                 context.draw(run)
             }

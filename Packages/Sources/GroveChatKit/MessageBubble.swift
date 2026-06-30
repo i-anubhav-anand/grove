@@ -578,62 +578,18 @@ struct ChangedFileRow: View {
     }
 }
 
-/// Hover popover: the file path + a colored diff of the edit hunks.
+/// Hover popover: styled DiffViewerCard showing the edit hunks.
 private struct EditDiffPreview: View {
     let edit: FileEdit
 
-    private var lines: [DiffLine] {
-        FileDiffView.buildEditDiffLines(from: edit.hunks)
-    }
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(edit.path)
-                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .medium, design: .monospaced))
-                    .foregroundStyle(ClaudeTheme.textSecondary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-                Spacer(minLength: 12)
-                if edit.added > 0 {
-                    Text(verbatim: "+\(edit.added)")
-                        .foregroundStyle(ClaudeTheme.statusSuccess)
-                }
-                if edit.removed > 0 {
-                    Text(verbatim: "-\(edit.removed)")
-                        .foregroundStyle(ClaudeTheme.statusError)
-                }
-            }
-            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
-
-            ClaudeThemeDivider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
-                        Text(line.text.isEmpty ? " " : line.text)
-                            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
-                            .foregroundStyle(line.kind.foregroundColor)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 0.5)
-                            .background(diffRowBackground(line.kind))
-                    }
-                }
-            }
-            .frame(maxHeight: 320)
-        }
-        .padding(12)
-        .frame(width: 460)
-        .background(ClaudeTheme.codeBackground)
-    }
-
-    private func diffRowBackground(_ kind: DiffLine.Kind) -> Color {
-        switch kind {
-        case .added:   return ClaudeTheme.statusSuccess.opacity(0.08)
-        case .removed: return ClaudeTheme.statusError.opacity(0.08)
-        default:       return .clear
-        }
+        DiffViewerCard(
+            filePath: edit.path,
+            lines: FileDiffView.buildEditDiffLines(from: edit.hunks)
+        )
+        .frame(width: 480)
+        .padding(8)
+        .background(ClaudeTheme.background)
     }
 }
 

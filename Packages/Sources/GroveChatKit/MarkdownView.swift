@@ -58,7 +58,7 @@ struct MarkdownContentView: View {
                 case .attributedText(let attrStr):
                     Text(attrStr)
                         .font(.system(size: ClaudeTheme.messageSize(13)))
-                        .textRenderer(CodePillRenderer(fill: ClaudeTheme.surfaceTertiary, border: ClaudeTheme.border))
+                        .textRenderer(CodePillRenderer(fill: Color.primary.opacity(0.08), border: Color.primary.opacity(0.22)))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .blockquote(let attrStr):
@@ -568,7 +568,7 @@ private struct BlockquoteView: View {
 
     var body: some View {
         Text(content)
-            .textRenderer(CodePillRenderer(fill: ClaudeTheme.surfaceTertiary, border: ClaudeTheme.border))
+            .textRenderer(CodePillRenderer(fill: Color.primary.opacity(0.08), border: Color.primary.opacity(0.22)))
             .textSelection(.enabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 13)

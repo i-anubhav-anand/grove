@@ -1,5 +1,4 @@
 import SwiftUI
-import AppKit
 import GroveCore
 
 public struct FileDiffView: View {
@@ -122,13 +121,18 @@ public struct FileDiffView: View {
     }
 
     private var diffContentView: some View {
-        DiffTextRenderer(lines: diffLines) { index in
-            // Only commentable on real source lines, not hunk/meta headers.
-            if let index, let line = diffLines[safe: index],
-               line.kind != .hunk, line.kind != .meta {
-                selectedLineIndex = index
-            } else {
-                selectedLineIndex = nil
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(diffLines.enumerated()), id: \.offset) { index, line in
+                    DiffLineRow(
+                        line: line,
+                        isSelected: selectedLineIndex == index,
+                        onTap: {
+                            let commentable = line.kind != .hunk && line.kind != .meta
+                            selectedLineIndex = commentable ? (selectedLineIndex == index ? nil : index) : nil
+                        }
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -294,16 +298,6 @@ public struct FileDiffView: View {
 struct DiffLine {
     enum Kind {
         case added, removed, hunk, meta, context
-
-        var foregroundColor: Color {
-            switch self {
-            case .added:   return ClaudeTheme.statusSuccess
-            case .removed: return ClaudeTheme.statusError
-            case .hunk:    return ClaudeTheme.textTertiary
-            case .meta:    return ClaudeTheme.textTertiary
-            case .context: return ClaudeTheme.textPrimary
-            }
-        }
     }
 
     let text: String
@@ -334,177 +328,67 @@ nonisolated func stripCommonIndent(old: [String], new: [String]) -> (old: [Strin
     return (old.map(strip), new.map(strip))
 }
 
-// MARK: - NSTextView-based Renderer (TextKit2)
+// MARK: - Diff Line Row
 
-private struct DiffTextRenderer: NSViewRepresentable {
-    let lines: [DiffLine]
-    /// Reports the index of the diff line containing the selection/caret (nil if none).
-    var onSelectLine: (Int?) -> Void = { _ in }
+/// Shared single-line renderer used by both FileDiffView (sheet) and DiffViewerCard (inline).
+struct DiffLineRow: View {
+    let line: DiffLine
+    var isSelected: Bool = false
+    var onTap: (() -> Void)? = nil
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    private var isAdded:   Bool { line.kind == .added }
+    private var isRemoved: Bool { line.kind == .removed }
+    private var isSpecial: Bool { line.kind == .hunk || line.kind == .meta }
 
-    func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
-        scrollView.hasVerticalScroller = true
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
-        scrollView.borderType = .noBorder
-        scrollView.drawsBackground = false
-
-        let textView = NSTextView()
-        textView.minSize = .zero
-        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
-        textView.isVerticallyResizable = true
-        // Disable auto horizontal resize: forces NSTextView to lay out the entire
-        // document up front to compute frame width. We size the container manually
-        // so TextKit2's viewport-based vertical layout stays lazy.
-        textView.isHorizontallyResizable = false
-        textView.autoresizingMask = [.width]
-        textView.textContainerInset = NSSize(width: 12, height: 10)
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.allowsUndo = false
-        textView.usesFontPanel = false
-        textView.usesFindBar = false
-        textView.drawsBackground = false
-        textView.isAutomaticQuoteSubstitutionEnabled = false
-        textView.isAutomaticDashSubstitutionEnabled = false
-        textView.isAutomaticTextReplacementEnabled = false
-        textView.isAutomaticLinkDetectionEnabled = false
-
-        if let container = textView.textContainer {
-            // Bounded width = TextKit2 keeps vertical layout lazy (viewport-only),
-            // long lines wrap to fit visible area, no full-document layout pass.
-            container.widthTracksTextView = true
-            container.heightTracksTextView = false
-            container.containerSize = NSSize(
-                width: 0,
-                height: CGFloat.greatestFiniteMagnitude
-            )
-            container.lineFragmentPadding = 0
-        }
-
-        scrollView.documentView = textView
-        textView.delegate = context.coordinator
-        context.coordinator.onSelectLine = onSelectLine
-        context.coordinator.attach(textView: textView, lines: lines)
-        return scrollView
+    private var bg: Color {
+        if isSelected { return ClaudeTheme.accent.opacity(0.15) }
+        if isAdded    { return ClaudeTheme.statusSuccess.opacity(0.10) }
+        if isRemoved  { return ClaudeTheme.statusError.opacity(0.10) }
+        return .clear
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
-        context.coordinator.onSelectLine = onSelectLine
-        context.coordinator.update(textView: textView, lines: lines)
+    private var codeText: String {
+        let t = line.text
+        guard !isSpecial, t.first == "+" || t.first == "-" else { return t }
+        return String(t.dropFirst())
     }
 
-    final class Coordinator: NSObject, NSTextViewDelegate {
-        private weak var textView: NSTextView?
-        private var lastLines: [DiffLine] = []
-        private var lastFingerprint: Int = 0
-        /// Character range of each diff line in the rendered string, for caret→line mapping.
-        private var lineRanges: [NSRange] = []
-        private var lastReportedLine: Int?
-        var onSelectLine: (Int?) -> Void = { _ in }
-        nonisolated(unsafe) private var themeObserver: NSObjectProtocol?
-
-        deinit {
-            if let observer = themeObserver {
-                NotificationCenter.default.removeObserver(observer)
-            }
-        }
-
-        func attach(textView: NSTextView, lines: [DiffLine]) {
-            self.textView = textView
-            apply(lines: lines, to: textView)
-            registerThemeObserver()
-        }
-
-        func update(textView: NSTextView, lines: [DiffLine]) {
-            let fp = fingerprint(of: lines)
-            if fp == lastFingerprint, textView === self.textView { return }
-            self.textView = textView
-            apply(lines: lines, to: textView)
-        }
-
-        private func registerThemeObserver() {
-            guard themeObserver == nil else { return }
-            themeObserver = NotificationCenter.default.addObserver(
-                forName: .groveThemeDidChange,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                MainActor.assumeIsolated {
-                    guard let self, let tv = self.textView else { return }
-                    self.apply(lines: self.lastLines, to: tv)
+    var body: some View {
+        HStack(spacing: 0) {
+            if !isSpecial {
+                Group {
+                    if let num = line.lineNumber {
+                        Text("\(num)")
+                            .font(.system(size: ClaudeTheme.messageSize(11), design: .monospaced))
+                            .foregroundStyle(ClaudeTheme.textTertiary.opacity(0.5))
+                    } else {
+                        Color.clear
+                    }
                 }
+                .frame(width: 38, alignment: .trailing)
+                .padding(.trailing, 6)
+
+                Text(isAdded ? "+" : isRemoved ? "−" : " ")
+                    .font(.system(size: ClaudeTheme.messageSize(11), weight: .semibold, design: .monospaced))
+                    .foregroundStyle(
+                        isAdded   ? ClaudeTheme.statusSuccess :
+                        isRemoved ? ClaudeTheme.statusError   : Color.clear
+                    )
+                    .frame(width: 16, alignment: .center)
             }
+
+            Text(codeText.isEmpty ? " " : codeText)
+                .font(.system(size: ClaudeTheme.messageSize(12), design: .monospaced))
+                .foregroundStyle(isSpecial ? ClaudeTheme.textTertiary : ClaudeTheme.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, isSpecial ? 10 : 6)
         }
-
-        private func apply(lines: [DiffLine], to textView: NSTextView) {
-            let (attributed, ranges) = Self.buildAttributedString(lines: lines)
-            textView.textStorage?.setAttributedString(attributed)
-            lineRanges = ranges
-            lastReportedLine = nil
-            lastLines = lines
-            lastFingerprint = fingerprint(of: lines)
-        }
-
-        func textViewDidChangeSelection(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            let location = textView.selectedRange().location
-            let index = lineRanges.firstIndex { NSLocationInRange(location, $0) }
-                ?? (location >= (lineRanges.last.map { $0.location + $0.length } ?? 0) ? lineRanges.indices.last : nil)
-            guard index != lastReportedLine else { return }
-            lastReportedLine = index
-            onSelectLine(index)
-        }
-
-        private func fingerprint(of lines: [DiffLine]) -> Int {
-            var hasher = Hasher()
-            hasher.combine(lines.count)
-            if let first = lines.first {
-                hasher.combine(first.text)
-                hasher.combine(first.kind)
-            }
-            if let last = lines.last, lines.count > 1 {
-                hasher.combine(last.text)
-                hasher.combine(last.kind)
-            }
-            return hasher.finalize()
-        }
-
-        private static func buildAttributedString(lines: [DiffLine]) -> (NSAttributedString, [NSRange]) {
-            let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-            let gutterColor = NSColor(ClaudeTheme.textTertiary).withAlphaComponent(0.6)
-            let maxNumber = lines.compactMap(\.lineNumber).max() ?? lines.count
-            let gutterDigits = max(String(maxNumber).count, 2)
-            let blankPrefix = String(repeating: " ", count: gutterDigits) + "  "
-
-            let result = NSMutableAttributedString()
-            var ranges: [NSRange] = []
-            for (index, line) in lines.enumerated() {
-                let lineStart = result.length
-                let prefix: String
-                if line.kind == .meta || line.kind == .hunk {
-                    prefix = blankPrefix
-                } else {
-                    let n = String(line.lineNumber ?? (index + 1))
-                    prefix = String(repeating: " ", count: max(0, gutterDigits - n.count)) + n + "  "
-                }
-                result.append(NSAttributedString(string: prefix, attributes: [
-                    .font: font,
-                    .foregroundColor: gutterColor,
-                ]))
-
-                let bodyAttrs: [NSAttributedString.Key: Any] = [
-                    .font: font,
-                    .foregroundColor: NSColor(line.kind.foregroundColor),
-                ]
-                let bodyText = (line.text.isEmpty ? " " : line.text) + "\n"
-                result.append(NSAttributedString(string: bodyText, attributes: bodyAttrs))
-                ranges.append(NSRange(location: lineStart, length: result.length - lineStart))
-            }
-            return (result, ranges)
-        }
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity)
+        .background(bg)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap?() }
     }
 }
+
