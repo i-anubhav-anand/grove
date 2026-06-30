@@ -449,7 +449,11 @@ struct PlainActivityRow: View {
             let limit = 72
             return firstLine.count > limit ? String(firstLine.prefix(limit)) + "…" : firstLine
         case .toolCall(let tc) where ["agent", "task"].contains(tc.name.lowercased()):
-            return tc.input["description"]?.stringValue
+            guard let desc = tc.input["description"]?.stringValue else { return nil }
+            // Strip leading "ActionWord: " prefix (e.g. "Hunt: ", "Explore: ")
+            // that models often prepend — show only the actual task description.
+            let stripped = desc.replacing(#/^\w+:\s*/#, with: "")
+            return stripped.isEmpty ? desc : stripped
         default:
             return nil
         }
