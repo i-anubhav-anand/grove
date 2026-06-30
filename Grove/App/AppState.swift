@@ -2695,23 +2695,23 @@ final class AppState {
 
             let url = await self.cliStore.directory(forCwd: cwd)
                 .appendingPathComponent("\(sessionId).jsonl")
+
+            // Load subagent runs before the cache check — they live in small
+            // per-agent files, are independent of the session parse, and must
+            // be populated even when the main JSONL is unchanged (cache hit).
+            let subagentRuns = SubagentStepsLoader.load(mainSessionJSONL: url)
+            if !subagentRuns.isEmpty {
+                await MainActor.run { self.subagentRunsBySession[sessionId] = subagentRuns }
+            }
+
             let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
             let currentSize: UInt64? = (attrs?[.size] as? Int).flatMap(UInt64.init(exactly:))
             let currentMtime = attrs?[.modificationDate] as? Date
 
             // Skip parse only when file is byte-for-byte unchanged (size AND mtime match).
-            // Any change — including shrink — triggers a fresh parse.
             if let lastKey, let currentSize, let currentMtime,
                ReloadCacheKey(size: currentSize, mtime: currentMtime) == lastKey {
                 return
-            }
-
-            // Load subagent runs first — they live in small per-agent files and
-            // are independent of the full session parse. Pushing them to MainActor
-            // now unblocks expanded Agent/Task rows before the heavier session load.
-            let subagentRuns = SubagentStepsLoader.load(mainSessionJSONL: url)
-            if !subagentRuns.isEmpty {
-                await MainActor.run { self.subagentRunsBySession[sessionId] = subagentRuns }
             }
 
             guard let full = await self.persistence.loadFullSession(summary: summary, cwd: cwd) else { return }

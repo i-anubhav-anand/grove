@@ -8,7 +8,7 @@ struct AgentStepsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let type = run.agentType, !type.isEmpty {
+            if let type = run.agentType, !type.isEmpty, !run.steps.isEmpty {
                 Text(type.uppercased())
                     .font(.system(size: ClaudeTheme.messageSize(9), weight: .semibold))
                     .foregroundStyle(ClaudeTheme.textTertiary)
