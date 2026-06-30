@@ -11,7 +11,7 @@ struct MainView: View {
     @State private var sidebarTab: SidebarTab = .history
     @State private var fileSearchTrigger = false
     @State private var inspectorStarted = true
-    @AppStorage("inspectorPanelWidth") private var inspectorWidth: Double = 320
+    @AppStorage("inspectorPanelWidth") private var inspectorWidth: Double = 360
     @State private var resizeBaseWidth: Double? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showCommandPalette = false
@@ -21,6 +21,9 @@ struct MainView: View {
     // Sidebar's widest possible column (see navigationSplitViewColumnWidth below) —
     // used as the worst-case deduction when budgeting room for the inspector.
     private let maxSidebarWidth: CGFloat = 360
+    // Inspector floor — wide enough for all four tabs even with a 2-digit
+    // count badge (e.g. "Changes 12"), so the tab strip never clips/scrolls.
+    private let minInspectorWidth: CGFloat = 360
 
     enum SidebarTab: String, CaseIterable {
         case history = "History"
@@ -43,16 +46,23 @@ struct MainView: View {
             // window, but never so wide that sidebar (worst case) + chat floor + inspector would
             // overflow the window — the chat always gets its room between the two side panels.
             let maxInspector = min(
-                max(320, geo.size.width * 0.25),
-                max(geo.size.width - maxSidebarWidth - minChatWidth, 320)
+                max(minInspectorWidth, geo.size.width * 0.25),
+                max(geo.size.width - maxSidebarWidth - minChatWidth, minInspectorWidth)
             )
+            let inspectorVisible = inspectorStarted && windowState.showInspector
+            let resolvedInspectorWidth = inspectorVisible
+                ? min(max(CGFloat(inspectorWidth), minInspectorWidth), maxInspector)
+                : 0
+            // Hard cap on the sidebar+chat side so oversized chat content (e.g. a wide
+            // non-wrapping table) can never inflate past its budget and squeeze the inspector —
+            // the inspector's own .frame(width:) is the source of truth, this just protects it.
+            let chatSideMaxWidth = geo.size.width - resolvedInspectorWidth - (inspectorVisible ? 1 : 0)
             HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     sidebarContent
                 } detail: {
                     detailContent
-                        .frame(minWidth: minChatWidth, maxWidth: .infinity)
                 }
                 .background {
                     Button("") {
@@ -94,8 +104,8 @@ struct MainView: View {
                     let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
                     return "Grove(\(appVersion))"
                 }())
-                .layoutPriority(1)
             }
+            .frame(maxWidth: chatSideMaxWidth)
             .overlay {
                 CommandPaletteView(isPresented: $showCommandPalette)
                     .background {
@@ -105,7 +115,7 @@ struct MainView: View {
                     }
             }
 
-            if inspectorStarted && windowState.showInspector {
+            if inspectorVisible {
                 Rectangle()
                     .fill(ClaudeTheme.border)
                     .frame(width: 1)
@@ -116,7 +126,7 @@ struct MainView: View {
                                 // (Reading + writing inspectorWidth with absolute translation made it accelerate.)
                                 let base = resizeBaseWidth ?? inspectorWidth
                                 if resizeBaseWidth == nil { resizeBaseWidth = base }
-                                inspectorWidth = min(max(base - value.translation.width, 320), maxInspector)
+                                inspectorWidth = min(max(base - value.translation.width, minInspectorWidth), maxInspector)
                             }
                             .onEnded { _ in resizeBaseWidth = nil }
                     )
@@ -125,8 +135,11 @@ struct MainView: View {
                     }
 
                 InspectorPanel()
-                    .frame(width: min(max(CGFloat(inspectorWidth), 320), maxInspector))
+                    .frame(width: resolvedInspectorWidth)
                     .id(appState.themeRevision)
+                    // Higher priority than the chat side: oversized chat content (e.g. a wide
+                    // non-wrapping table) must never compress the inspector below its set width.
+                    .layoutPriority(1)
             }
             } // HStack
             } // GeometryReader
