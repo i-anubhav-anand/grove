@@ -2706,9 +2706,16 @@ final class AppState {
                 return
             }
 
+            // Load subagent runs first — they live in small per-agent files and
+            // are independent of the full session parse. Pushing them to MainActor
+            // now unblocks expanded Agent/Task rows before the heavier session load.
+            let subagentRuns = SubagentStepsLoader.load(mainSessionJSONL: url)
+            if !subagentRuns.isEmpty {
+                await MainActor.run { self.subagentRunsBySession[sessionId] = subagentRuns }
+            }
+
             guard let full = await self.persistence.loadFullSession(summary: summary, cwd: cwd) else { return }
             let cleaned = await self.cleanLoadedMessages(full.messages)
-            let subagentRuns = SubagentStepsLoader.load(mainSessionJSONL: url)
             await MainActor.run {
                 self.subagentRunsBySession[sessionId] = subagentRuns
                 guard var state = self.sessionStates[sessionId],
