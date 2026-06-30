@@ -755,7 +755,10 @@ private struct ChainStepRow: View {
             PlainActivityRow(item: item, expandedOverride: itemExpandedBinding)
                 .padding(.bottom, isLast ? 0 : 4)
         }
-        // Connector is in an overlay so it cannot inflate the HStack height.
+        // fixedSize prevents the parent (containerRelativeFrame / ScrollView)
+        // from proposing infinite height to this row and inflating it.
+        .fixedSize(horizontal: false, vertical: true)
+        // Connector in overlay so it doesn't contribute to layout height.
         .overlay(alignment: .topLeading) {
             if !isLast {
                 VStack(spacing: 0) {
