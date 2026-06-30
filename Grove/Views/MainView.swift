@@ -34,14 +34,17 @@ struct MainView: View {
         } else {
             GeometryReader { geo in
             // Inspector floor = the default width (never shrink below it); ceiling = 25% of the
-            // window so the chat keeps ≥75%. On narrow windows where 25% < default, the default wins.
-            let maxInspector = max(320, geo.size.width * 0.25)
+            // window, but never so wide that the chat pane drops below minChatWidth — the chat
+            // is never the one that gives way when the inspector resizes or opens at its default.
+            let minChatWidth: CGFloat = 480
+            let maxInspector = min(max(320, geo.size.width * 0.25), max(geo.size.width - minChatWidth, 320))
             HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     sidebarContent
                 } detail: {
                     detailContent
+                        .frame(minWidth: 480)
                 }
                 .background {
                     Button("") {
