@@ -11,23 +11,15 @@ struct MessageListView: View {
     @State private var scrollTask: Task<Void, Never>?
     @State private var isNearBottom = true
     @State private var isSessionReady = false
-    @State private var chatWidth: CGFloat = 0
-    /// Window-derived hard ceiling for the column, injected by the host layout.
-    /// Clamping the measured width against it prevents a wide table/code block from
-    /// inflating the column (and thus its own cap) in a feedback loop.
+    /// The chat column width, injected by the host layout (MainView). It's derived
+    /// purely from window geometry (window − inspector − sidebar), so it never depends
+    /// on message content — the single, feedback-free source of truth for every width
+    /// cap in the chat. `.infinity` only until the host provides a value.
     @Environment(\.chatColumnMaxWidth) private var chatColumnMaxWidth
-
-    /// The effective column width: the measured width, but never above the stable
-    /// window-derived ceiling. Falls back to the ceiling before the first measurement.
-    private var effectiveChatWidth: CGFloat {
-        let measured = chatWidth > 0 ? chatWidth : .infinity
-        return min(measured, chatColumnMaxWidth)
-    }
 
     /// Cap each message bubble (query + response) at 75% of the chat column.
     private var bubbleMaxWidth: CGFloat {
-        let w = effectiveChatWidth
-        return w < .infinity ? max(0, w - 40) * 0.75 : .infinity
+        chatColumnMaxWidth < .infinity ? max(0, chatColumnMaxWidth - 40) * 0.75 : .infinity
     }
 
     var body: some View {
@@ -112,13 +104,6 @@ struct MessageListView: View {
             }
         }
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isNearBottom)
-        .background {
-            GeometryReader { proxy in
-                Color.clear.onChange(of: proxy.size.width, initial: true) { _, w in
-                    chatWidth = w
-                }
-            }
-        }
         .environment(\.bubbleMaxWidth, bubbleMaxWidth)
     }
 

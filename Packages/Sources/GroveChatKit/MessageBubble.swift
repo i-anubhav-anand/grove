@@ -622,10 +622,10 @@ extension EnvironmentValues {
     }
 }
 
-/// A stable, window-derived ceiling for the chat column, injected by the host
-/// layout (MainView). Unlike a measured chat width, it does NOT depend on message
-/// content, so clamping against it breaks the feedback loop where a wide table
-/// inflates the column, which inflates the measured width, which un-caps the table.
+/// The chat column width, injected by the host layout (MainView), derived purely from
+/// window geometry (window − inspector − sidebar). It does NOT depend on message content,
+/// so it's the single feedback-free source of truth every chat width cap derives from —
+/// avoiding the loop where measuring a content-inflated column would un-cap the content.
 private struct ChatColumnMaxWidthKey: EnvironmentKey {
     static let defaultValue: CGFloat = .infinity
 }

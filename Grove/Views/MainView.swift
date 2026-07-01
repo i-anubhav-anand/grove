@@ -62,17 +62,18 @@ struct MainView: View {
             // non-wrapping table) can never inflate past its budget and squeeze the inspector —
             // the inspector's own .frame(width:) is the source of truth, this just protects it.
             let chatSideMaxWidth = geo.size.width - resolvedInspectorWidth - (inspectorVisible ? 1 : 0)
-            // Stable ceiling for the chat/detail column: total chat-side width minus the
-            // (independently-bounded) sidebar. Injected into the chat so wide tables/code
-            // clip+scroll instead of stretching the detail pane past the window edge.
-            let chatColumnCeiling = max(minChatWidth, chatSideMaxWidth - sidebarWidth)
+            // The chat/detail column width: chat-side budget minus the (independently
+            // bounded) sidebar. Purely window-derived — no dependency on message content —
+            // so it's the single, feedback-free source of truth every chat width cap uses.
+            // Fully dynamic: recomputes as the window, inspector, or sidebar resize.
+            let chatColumnWidth = max(minChatWidth, chatSideMaxWidth - sidebarWidth)
             HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     sidebarContent
                 } detail: {
                     detailContent
-                        .environment(\.chatColumnMaxWidth, chatColumnCeiling)
+                        .environment(\.chatColumnMaxWidth, chatColumnWidth)
                 }
                 .background {
                     Button("") {
@@ -115,12 +116,10 @@ struct MainView: View {
                     return "Grove(\(appVersion))"
                 }())
             }
-            // Hard width + clip: pins the sidebar+chat region to exactly its budget so NO
-            // content (markdown table, diff, code, tool output) can inflate it and shove the
-            // whole layout off-screen. Oversized content is clipped at the chat's right edge
-            // (its internal horizontal scroll views still scroll) instead of pushing the panels.
-            .frame(width: chatSideMaxWidth, alignment: .leading)
-            .clipped()
+            // Bound the sidebar+chat region to its budget. Content stays within because every
+            // chat width cap derives from chatColumnWidth (above), so nothing rigid can inflate
+            // the detail pane — no clipping hack needed, and text bubbles keep their margin.
+            .frame(maxWidth: chatSideMaxWidth)
             .overlay {
                 CommandPaletteView(isPresented: $showCommandPalette)
                     .background {
