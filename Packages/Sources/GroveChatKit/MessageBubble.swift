@@ -89,13 +89,10 @@ struct MessageBubble: View {
                     }
                 }
             }
-            // User messages are chat-style bubbles capped at 75% and right-aligned; assistant
-            // responses (the main content, incl. tables/code) fill the full column, left-aligned.
-            // The row itself is already confined to the chat column by MessageListView.
-            .frame(
-                maxWidth: message.role == .user ? bubbleMaxWidth : .infinity,
-                alignment: message.role == .user ? .trailing : .leading
-            )
+            // Both roles cap at 75% of the chat column so text stays inside the text area with a
+            // margin before the inspector (never edge-to-edge). User bubbles trail right, assistant
+            // content leads left. The row is already confined to the column by MessageListView.
+            .frame(maxWidth: bubbleMaxWidth, alignment: message.role == .user ? .trailing : .leading)
 
             if message.role == .assistant {
                 Spacer(minLength: 0)
