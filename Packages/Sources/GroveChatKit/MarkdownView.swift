@@ -585,9 +585,10 @@ private struct BlockquoteView: View {
 private struct MarkdownTableView: View {
     let headers: [String]
     let rows: [[String]]
-    // Column-derived cap (not content-derived), so a wide table clips to the
-    // bubble width and scrolls internally instead of inflating past it.
-    @Environment(\.bubbleMaxWidth) private var bubbleMaxWidth
+    // Full column width (not the 75% bubble cap): tables are assistant content and
+    // should use the whole column, scrolling internally when wider. Column-derived
+    // (not content-derived) so it can't inflate the column in a feedback loop.
+    @Environment(\.chatColumnMaxWidth) private var chatColumnMaxWidth
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -624,7 +625,10 @@ private struct MarkdownTableView: View {
                     .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
             )
         }
-        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+        // −40 = the message row's horizontal insets (20pt each side), so a table aligns
+        // with the surrounding text and keeps the same margin before the inspector rather
+        // than the scroll view greedily expanding to the full column edge.
+        .frame(maxWidth: chatColumnMaxWidth - 40, alignment: .leading)
         .textSelection(.enabled)
         .padding(.vertical, 4)
     }
@@ -662,9 +666,9 @@ struct CodeBlockView: View {
     let language: String
     let code: String
     @State private var isCopied = false
-    // Column-derived cap so long unwrapped lines clip + scroll internally
-    // rather than pushing the bubble wider than the chat column.
-    @Environment(\.bubbleMaxWidth) private var bubbleMaxWidth
+    // Full column width so code uses the whole column; long unwrapped lines clip +
+    // scroll internally rather than pushing wider. Column-derived (not content-derived).
+    @Environment(\.chatColumnMaxWidth) private var chatColumnMaxWidth
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -695,7 +699,8 @@ struct CodeBlockView: View {
                     .fixedSize()
                     .padding(12)
             }
-            .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
+            // −40 = the message row's horizontal insets, so code aligns with the text.
+            .frame(maxWidth: chatColumnMaxWidth - 40, alignment: .leading)
         }
         .background(ClaudeTheme.codeBackground)
         .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))

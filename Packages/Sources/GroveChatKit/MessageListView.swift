@@ -29,6 +29,9 @@ struct MessageListView: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
+            // Confine messages to the chat column so right-aligned user bubbles can never
+            // render under the inspector, regardless of how the split pane sizes the detail.
+            .frame(maxWidth: chatColumnMaxWidth, alignment: .leading)
 
             // Streaming view is outside VStack — text deltas don't affect settled layout
             VStack(spacing: 16) {
@@ -48,6 +51,7 @@ struct MessageListView: View {
                 }
             }
             .padding(.horizontal, 20)
+            .frame(maxWidth: chatColumnMaxWidth, alignment: .leading)
             // Suppress layout animations when switching sessions so the pulse indicator
             // doesn't visually jump as StreamingMessageView changes height.
             .animation(.none, value: windowState.currentSessionId)
