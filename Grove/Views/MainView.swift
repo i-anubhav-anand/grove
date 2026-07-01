@@ -15,6 +15,11 @@ struct MainView: View {
     @State private var resizeBaseWidth: Double? = nil
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showCommandPalette = false
+    // Measured width of the sidebar column. NavigationSplitView keeps this within its
+    // 220–360 bounds regardless of chat content, so it's a stable input for deriving
+    // the chat column's hard width ceiling (used to keep wide tables/code from
+    // inflating the detail pane past the window edge).
+    @State private var sidebarWidth: CGFloat = 280
     // Hard floor for the chat pane — sidebar and inspector budgets are computed
     // to always leave at least this much room, so chat never overlaps either side.
     private let minChatWidth: CGFloat = 380
@@ -57,12 +62,17 @@ struct MainView: View {
             // non-wrapping table) can never inflate past its budget and squeeze the inspector —
             // the inspector's own .frame(width:) is the source of truth, this just protects it.
             let chatSideMaxWidth = geo.size.width - resolvedInspectorWidth - (inspectorVisible ? 1 : 0)
+            // Stable ceiling for the chat/detail column: total chat-side width minus the
+            // (independently-bounded) sidebar. Injected into the chat so wide tables/code
+            // clip+scroll instead of stretching the detail pane past the window edge.
+            let chatColumnCeiling = max(minChatWidth, chatSideMaxWidth - sidebarWidth)
             HStack(spacing: 0) {
             HSplitView {
                 NavigationSplitView(columnVisibility: $columnVisibility) {
                     sidebarContent
                 } detail: {
                     detailContent
+                        .environment(\.chatColumnMaxWidth, chatColumnCeiling)
                 }
                 .background {
                     Button("") {
@@ -105,7 +115,12 @@ struct MainView: View {
                     return "Grove(\(appVersion))"
                 }())
             }
-            .frame(maxWidth: chatSideMaxWidth)
+            // Hard width + clip: pins the sidebar+chat region to exactly its budget so NO
+            // content (markdown table, diff, code, tool output) can inflate it and shove the
+            // whole layout off-screen. Oversized content is clipped at the chat's right edge
+            // (its internal horizontal scroll views still scroll) instead of pushing the panels.
+            .frame(width: chatSideMaxWidth, alignment: .leading)
+            .clipped()
             .overlay {
                 CommandPaletteView(isPresented: $showCommandPalette)
                     .background {
@@ -161,6 +176,16 @@ struct MainView: View {
             }
         }
         .background(ClaudeTheme.sidebarBackground)
+        .background {
+            // Measure the sidebar's actual column width (bounded 220–360 by
+            // NavigationSplitView, independent of chat content) to derive the
+            // chat column's stable width ceiling.
+            GeometryReader { proxy in
+                Color.clear.onChange(of: proxy.size.width, initial: true) { _, w in
+                    if w > 0 { sidebarWidth = w }
+                }
+            }
+        }
         .navigationSplitViewColumnWidth(min: 220, ideal: 280, max: 360)
     }
 

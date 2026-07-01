@@ -585,6 +585,9 @@ private struct BlockquoteView: View {
 private struct MarkdownTableView: View {
     let headers: [String]
     let rows: [[String]]
+    // Column-derived cap (not content-derived), so a wide table clips to the
+    // bubble width and scrolls internally instead of inflating past it.
+    @Environment(\.bubbleMaxWidth) private var bubbleMaxWidth
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -621,6 +624,7 @@ private struct MarkdownTableView: View {
                     .strokeBorder(ClaudeTheme.border, lineWidth: 0.5)
             )
         }
+        .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
         .textSelection(.enabled)
         .padding(.vertical, 4)
     }
@@ -658,6 +662,9 @@ struct CodeBlockView: View {
     let language: String
     let code: String
     @State private var isCopied = false
+    // Column-derived cap so long unwrapped lines clip + scroll internally
+    // rather than pushing the bubble wider than the chat column.
+    @Environment(\.bubbleMaxWidth) private var bubbleMaxWidth
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -688,7 +695,7 @@ struct CodeBlockView: View {
                     .fixedSize()
                     .padding(12)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: bubbleMaxWidth, alignment: .leading)
         }
         .background(ClaudeTheme.codeBackground)
         .clipShape(RoundedRectangle(cornerRadius: ClaudeTheme.cornerRadiusSmall))

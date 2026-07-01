@@ -621,3 +621,20 @@ extension EnvironmentValues {
         set { self[BubbleMaxWidthKey.self] = newValue }
     }
 }
+
+/// A stable, window-derived ceiling for the chat column, injected by the host
+/// layout (MainView). Unlike a measured chat width, it does NOT depend on message
+/// content, so clamping against it breaks the feedback loop where a wide table
+/// inflates the column, which inflates the measured width, which un-caps the table.
+private struct ChatColumnMaxWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = .infinity
+}
+
+extension EnvironmentValues {
+    // public: set by the host app's MainView (a different module) to inject a
+    // stable, window-derived column ceiling.
+    public var chatColumnMaxWidth: CGFloat {
+        get { self[ChatColumnMaxWidthKey.self] }
+        set { self[ChatColumnMaxWidthKey.self] = newValue }
+    }
+}

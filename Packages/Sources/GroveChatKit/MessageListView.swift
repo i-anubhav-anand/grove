@@ -12,10 +12,22 @@ struct MessageListView: View {
     @State private var isNearBottom = true
     @State private var isSessionReady = false
     @State private var chatWidth: CGFloat = 0
+    /// Window-derived hard ceiling for the column, injected by the host layout.
+    /// Clamping the measured width against it prevents a wide table/code block from
+    /// inflating the column (and thus its own cap) in a feedback loop.
+    @Environment(\.chatColumnMaxWidth) private var chatColumnMaxWidth
+
+    /// The effective column width: the measured width, but never above the stable
+    /// window-derived ceiling. Falls back to the ceiling before the first measurement.
+    private var effectiveChatWidth: CGFloat {
+        let measured = chatWidth > 0 ? chatWidth : .infinity
+        return min(measured, chatColumnMaxWidth)
+    }
 
     /// Cap each message bubble (query + response) at 75% of the chat column.
     private var bubbleMaxWidth: CGFloat {
-        chatWidth > 0 ? max(0, chatWidth - 40) * 0.75 : .infinity
+        let w = effectiveChatWidth
+        return w < .infinity ? max(0, w - 40) * 0.75 : .infinity
     }
 
     var body: some View {
